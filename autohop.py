@@ -2040,11 +2040,13 @@ else:
         with col4:
             st.plotly_chart(fig_working_days)
 
+        # Ensure dates are in datetime format and remove timezone info
         heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.tz_localize(None)
         shift_data_df['Actual Date'] = pd.to_datetime(shift_data_df['Actual Date']).dt.tz_localize(None)
         v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['Actual Date']).dt.tz_localize(None)
         v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(v_mode_shift_hours_df['Actual Date']).dt.tz_localize(None)
 
+        # Filter dataframes based on the given date range
         heatmap_final_df_filtered = heatmap_final_df[
             (heatmap_final_df['Actual Date'] >= start_date) & (heatmap_final_df['Actual Date'] <= end_date)]
         shift_data_df_filtered = shift_data_df[
@@ -2054,63 +2056,61 @@ else:
         v_mode_shift_hours_df_filtered = v_mode_shift_hours_df[
             (v_mode_shift_hours_df['Actual Date'] >= start_date) & (v_mode_shift_hours_df['Actual Date'] <= end_date)]
 
-
-
-        # Now merge D_Mode and V_Mode data for the heatmap
-        #final_heatmap_df = pd.concat([heatmap_final_df, v_mode_final_df])
-
-        #final_heatmap_df.to_csv('past_bookings72.csv', index=False)
-
-        # Calculate required metrics for heatmap
+        # Calculate D Mode stats
         d_mode_stats = heatmap_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
             Total_Sessions=('Actual Date', 'count'),
             Avg_Sessions=('Actual Date', lambda x: len(x) / x.nunique()),
             Delay_Count=('t-15_kpi', lambda x: (x == 2).sum()),
-            D_Mode=('donorVMode', lambda x: (x == 'FALSE').sum()),
+            D_Mode=('donorVMode', lambda x: (x == 'FALSE').sum())
         ).reset_index()
 
-        # Calculate total shift hours and total shifts for D_Mode
+        # Calculate total shift hours and distinct shift count for D Mode
         d_mode_shift_hours = shift_data_df_filtered.groupby('Actual OPERATOR NAME').agg(
             D_Mode_Shift_Hours=('Shift_Hours', 'sum'),
-            D_Mode_Total_Shifts=('Shift_Hours', 'count')  # Assuming each row represents a shift
+            D_Mode_Total_Shifts=('shiftUid', 'count')
         ).reset_index()
 
-        # Merge D_Mode stats with shift hours
+        # Merge D Mode stats with shift hours
         d_mode_stats = pd.merge(d_mode_stats, d_mode_shift_hours, on='Actual OPERATOR NAME', how='left')
 
-        # Calculate V_Mode metrics
+        # Calculate V Mode stats
         v_mode_stats = v_mode_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
-            V_Mode=('donorVMode', lambda x: (x == 'TRUE').sum()),
+            V_Mode=('donorVMode', lambda x: (x == 'TRUE').sum())
         ).reset_index()
 
-        # Calculate total shift hours and total shifts for V_Mode
+        # Calculate total shift hours and distinct shift count for V Mode
         v_mode_shift_hours = v_mode_shift_hours_df_filtered.groupby('Actual OPERATOR NAME').agg(
             V_Mode_Shift_Hours=('Shift_Hours', 'sum'),
-            V_Mode_Total_Shifts=('Shift_Hours', 'count')  # Assuming each row represents a shift
+            V_Mode_Total_Shifts=('shiftUid', 'count')
         ).reset_index()
 
-        # Merge V_Mode stats with shift hours
+        # Merge V Mode stats with shift hours
         v_mode_stats = pd.merge(v_mode_stats, v_mode_shift_hours, on='Actual OPERATOR NAME', how='left')
 
-        # Merge D_Mode and V_Mode metrics
+        # Merge D Mode and V Mode metrics
         operator_stats = pd.merge(d_mode_stats, v_mode_stats, on='Actual OPERATOR NAME', how='outer').fillna(0)
 
-        # Calculate average shift hours per shift for D_Mode
-        operator_stats['Avg_Shift_Hours'] = operator_stats['D_Mode_Shift_Hours'] / operator_stats['D_Mode_Total_Shifts']
+        # Calculate average shift hours per shift considering both D Mode and V Mode
+        operator_stats['Total_Shift_Hours'] = operator_stats['D_Mode_Shift_Hours'] + operator_stats[
+            'V_Mode_Shift_Hours']
+        operator_stats['Total_Shifts'] = operator_stats['D_Mode_Total_Shifts'] + operator_stats['V_Mode_Total_Shifts']
+        operator_stats['Avg_Shift_Hours'] = operator_stats['Total_Shift_Hours'] / operator_stats['Total_Shifts']
 
         # Rename columns for better display
         operator_stats.columns = ['Operator', 'Total Sessions', 'Avg Sessions', 'Delay Count', 'D Mode',
                                   'D_Mode_Shift_Hours', 'D_Mode_Total_Shifts', 'V Mode', 'V_Mode_Shift_Hours',
-                                  'V_Mode_Total_Shifts', 'Avg Shift Hours']
+                                  'V_Mode_Total_Shifts', 'Total Shift Hours', 'Total Shifts', 'Avg Shift Hours']
 
-        # Display the table
+        # Display the table without D Mode and V Mode Shift Hours columns, but with Total Shifts
         st.markdown("### Operator Statistics Table")
-        st.table(operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'D Mode', 'Delay Count', 'V Mode',
-                                 'D_Mode_Shift_Hours', 'V_Mode_Shift_Hours', 'Avg Shift Hours']])
+        st.table(operator_stats[
+                     ['Operator', 'Total Sessions', 'Avg Sessions', 'D Mode', 'Delay Count', 'V Mode', 'Total Shifts',
+                      'Avg Shift Hours']])
 
         # Export the table to CSV
-        csv = operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'D Mode', 'Delay Count', 'V Mode',
-                              'D_Mode_Shift_Hours', 'V_Mode_Shift_Hours', 'Avg Shift Hours']].to_csv(index=False)
+        csv = operator_stats[
+            ['Operator', 'Total Sessions', 'Avg Sessions', 'D Mode', 'Delay Count', 'V Mode', 'Total Shifts',
+             'Avg Shift Hours']].to_csv(index=False)
 
         st.download_button(
             label="Download data as CSV",
