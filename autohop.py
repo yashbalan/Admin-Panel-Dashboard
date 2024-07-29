@@ -83,46 +83,38 @@ else:
     drivers_shifts_df['Shift_Hours'] = (drivers_shifts_df['shiftEndedAt'] - drivers_shifts_df[
         'shiftStartedAt']).dt.total_seconds() / 3600
 
+    # Create a mapping of driverUid to operator names
+    driver_uid_mapping = drivers_shifts_df.groupby('driverUid')[['driverFirstName', 'driverLastName']].apply(
+        lambda x: x.iloc[0]['driverFirstName'] + ' ' + x.iloc[0]['driverLastName']).to_dict()
+
     # For the heatmap, prepare data for V_Mode
     v_mode_drivers_df = drivers_shifts_df[drivers_shifts_df['donorVMode'] == 'TRUE']
-    v_mode_drivers_df['Actual OPERATOR NAME'] = drivers_shifts_df['driverFirstName'] + ' ' + drivers_shifts_df[
-        'driverLastName']
-    #v_mode_drivers_df = v_mode_drivers_df[v_mode_drivers_df['bookingStatus'] == 'completed']
+    v_mode_drivers_df['Actual OPERATOR NAME'] = v_mode_drivers_df['driverUid'].map(driver_uid_mapping)
     v_mode_drivers_df['licensePlate'] = v_mode_drivers_df['licensePlate'].apply(clean_license_plate)
 
     # Process V_Mode Data
     v_mode_final_df = v_mode_drivers_df[
         ['licensePlate', 'shiftUid', 'Actual OPERATOR NAME', 'donorVMode', 'shiftStartedAt', 'shiftEndedAt']]
-
     v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['shiftStartedAt'], errors='coerce')
-
-    # Ensure that there are no NaT values in the Actual Date column
     v_mode_final_df = v_mode_final_df.dropna(subset=['Actual Date'])
-
-
-
-
-    # Removing duplicates based on uid and bookingUid
-    #v_mode_final_df = v_mode_final_df.drop_duplicates(subset=['shiftUid', 'Actual Date'])
-
-    #v_mode_final_df.to_csv('past_bookings72882.csv', index=False)
 
     past_bookings_df['Customer Name'] = past_bookings_df['firstName'] + " " + past_bookings_df['lastName']
     past_bookings_df['optChargeStartTime'] = pd.to_datetime(past_bookings_df['optChargeStartTime'], format='mixed',
                                                             errors='coerce')
     past_bookings_df['optChargeEndTime'] = pd.to_datetime(past_bookings_df['optChargeEndTime'], format='mixed',
                                                           errors='coerce')
-    past_bookings_df['Reach Time'] = pd.to_datetime(past_bookings_df['optChargeStartTime'], format='mixed', errors='coerce')
+    past_bookings_df['Reach Time'] = pd.to_datetime(past_bookings_df['optChargeStartTime'], format='mixed',
+                                                    errors='coerce')
     past_bookings_df.rename(columns={
         'optBatteryBeforeChrg': 'Actual SoC_Start',
         'optBatteryAfterChrg': 'Actual SoC_End'
     }, inplace=True)
     past_bookings_df['Booking Session time'] = pd.to_datetime(past_bookings_df['fromTime'], format='mixed',
-                                                    errors='coerce')
-
+                                                              errors='coerce')
 
     # Combine 'driverFirstName' and 'driverLastName' into 'Actual OPERATOR NAME'
-    past_bookings_df['Actual OPERATOR NAME'] = past_bookings_df['driverFirstName'] + ' ' + past_bookings_df['driverLastName']
+    past_bookings_df['Actual OPERATOR NAME'] = past_bookings_df['driverUid'].map(driver_uid_mapping)
+
 
     # Calculate t-15_kpi
     def calculate_t_minus_15(row):
@@ -144,52 +136,37 @@ else:
 
     if 'cancelledPenalty' not in past_bookings_df.columns:
         past_bookings_df['cancelledPenalty'] = 0
-        past_bookings_df.loc[
-            (past_bookings_df['canceled'] == True) & ((past_bookings_df['optChargeStartTime'] - past_bookings_df[
-                'Reach Time']).dt.total_seconds() / 60 < 15), 'cancelledPenalty'] = 1
+        past_bookings_df.loc[(past_bookings_df['canceled'] == True) & ((past_bookings_df['optChargeStartTime'] -
+                                                                        past_bookings_df[
+                                                                            'Reach Time']).dt.total_seconds() / 60 < 15), 'cancelledPenalty'] = 1
 
     # Filter where donorVMode is False
     filtered_drivers_df = drivers_shifts_df[drivers_shifts_df['donorVMode'] == 'FALSE']
     filtered_drivers_df = filtered_drivers_df.drop_duplicates(subset=['bookingUid'])
-
     filtered_drivers_df = drivers_shifts_df[drivers_shifts_df['bookingStatus'] == 'completed']
 
     heatmap_filtered_drivers_df = filtered_drivers_df.drop_duplicates(subset=['bookingUid'])
-
     heatmap_filtered_drivers_df = drivers_shifts_df[drivers_shifts_df['bookingStatus'] == 'completed']
-
 
     # Cleaning license plates
     filtered_drivers_df['licensePlate'] = filtered_drivers_df['licensePlate'].apply(clean_license_plate)
-
     heatmap_filtered_drivers_df['licensePlate'] = heatmap_filtered_drivers_df['licensePlate'].apply(clean_license_plate)
 
-    #past_bookings_df.to_csv('bookings3.csv', index=False)
-
-
     # Extracting Customer Location City by matching bookingUid with uid from past_bookings_df
-    merged_df = pd.merge(filtered_drivers_df, past_bookings_df[['uid', 'location.state', 'Customer Name', 'Actual OPERATOR NAME',
-                                'optChargeStartTime', 'optChargeEndTime', 'Reach Time', 'Actual SoC_Start',
-                                'Actual SoC_End', 'Booking Session time', 'canceled',
-                                'cancelledPenalty', 't-15_kpi', 'subscriptionName',
-                                'location.lat', 'location.long']],
-                         left_on='bookingUid', right_on='uid', how='left')
+    merged_df = pd.merge(filtered_drivers_df, past_bookings_df[
+        ['uid', 'location.state', 'Customer Name', 'Actual OPERATOR NAME', 'optChargeStartTime', 'optChargeEndTime',
+         'Reach Time', 'Actual SoC_Start', 'Actual SoC_End', 'Booking Session time', 'canceled', 'cancelledPenalty',
+         't-15_kpi', 'subscriptionName', 'location.lat', 'location.long']], left_on='bookingUid', right_on='uid',
+                         how='left')
 
-    heatmap_merged_df = pd.merge(heatmap_filtered_drivers_df,
-                         past_bookings_df[['uid', 'location.state', 'Customer Name', 'Actual OPERATOR NAME',
-                                           'optChargeStartTime', 'optChargeEndTime', 'Reach Time', 'Actual SoC_Start',
-                                           'Actual SoC_End', 'Booking Session time', 'canceled',
-                                           'cancelledPenalty', 't-15_kpi', 'subscriptionName',
-                                           'location.lat', 'location.long']],
-                         left_on='bookingUid', right_on='uid', how='left')
-
-
-    # Extracting Actual Date from fromTime
-    #merged_df['Actual Date'] = pd.to_datetime(merged_df['fromTime'], errors='coerce')
+    heatmap_merged_df = pd.merge(heatmap_filtered_drivers_df, past_bookings_df[
+        ['uid', 'location.state', 'Customer Name', 'Actual OPERATOR NAME', 'optChargeStartTime', 'optChargeEndTime',
+         'Reach Time', 'Actual SoC_Start', 'Actual SoC_End', 'Booking Session time', 'canceled', 'cancelledPenalty',
+         't-15_kpi', 'subscriptionName', 'location.lat', 'location.long']], left_on='bookingUid', right_on='uid',
+                                 how='left')
 
     # Extracting Actual Date from bookingFromTime
     merged_df['Actual Date'] = pd.to_datetime(merged_df['bookingFromTime'], errors='coerce')
-
     heatmap_merged_df['Actual Date'] = pd.to_datetime(heatmap_merged_df['bookingFromTime'], errors='coerce')
 
     # Ensure necessary columns are present, and calculate additional columns if needed
@@ -199,44 +176,37 @@ else:
     if 'Day' not in heatmap_merged_df.columns:
         heatmap_merged_df['Day'] = heatmap_merged_df['Actual Date'].dt.day_name()
 
-
-
     # Selecting and renaming the required columns
-    final_df = merged_df[['Actual Date', 'licensePlate', 'location.state', 'bookingUid', 'uid', 'bookingFromTime', 'bookingStatus', 'customerUid', 'totalUnitsCharged', 'Customer Name', 'Actual OPERATOR NAME',
-                                'optChargeStartTime', 'optChargeEndTime', 'Day', 'Reach Time', 'Actual SoC_Start',
-                                'Actual SoC_End', 'Booking Session time', 'canceled',
-                                'cancelledPenalty', 't-15_kpi', 'subscriptionName',
-                                'location.lat', 'location.long', 'donorVMode']].rename(columns={'location.state': 'Customer Location City', 'totalUnitsCharged':'KWH Pumped Per Session'})
+    final_df = merged_df[
+        ['Actual Date', 'licensePlate', 'location.state', 'bookingUid', 'uid', 'bookingFromTime', 'bookingStatus',
+         'customerUid', 'totalUnitsCharged', 'Customer Name', 'Actual OPERATOR NAME', 'optChargeStartTime',
+         'optChargeEndTime', 'Day', 'Reach Time', 'Actual SoC_Start', 'Actual SoC_End', 'Booking Session time',
+         'canceled', 'cancelledPenalty', 't-15_kpi', 'subscriptionName', 'location.lat', 'location.long',
+         'donorVMode']].rename(
+        columns={'location.state': 'Customer Location City', 'totalUnitsCharged': 'KWH Pumped Per Session'})
 
     heatmap_final_df = heatmap_merged_df[
-        ['Actual Date', 'licensePlate', 'location.state', 'bookingUid', 'uid', 'shiftUid', 'bookingFromTime', 'bookingStatus', 'shiftStartedAt', 'shiftEndedAt',
-         'customerUid', 'totalUnitsCharged', 'Customer Name', 'Actual OPERATOR NAME',
-         'optChargeStartTime', 'optChargeEndTime', 'Day', 'Reach Time', 'Actual SoC_Start',
-         'Actual SoC_End', 'Booking Session time', 'canceled',
-         'cancelledPenalty', 't-15_kpi', 'subscriptionName',
+        ['Actual Date', 'licensePlate', 'location.state', 'bookingUid', 'uid', 'shiftUid', 'bookingFromTime',
+         'bookingStatus', 'shiftStartedAt', 'shiftEndedAt', 'customerUid', 'totalUnitsCharged', 'Customer Name',
+         'Actual OPERATOR NAME', 'optChargeStartTime', 'optChargeEndTime', 'Day', 'Reach Time', 'Actual SoC_Start',
+         'Actual SoC_End', 'Booking Session time', 'canceled', 'cancelledPenalty', 't-15_kpi', 'subscriptionName',
          'location.lat', 'location.long', 'donorVMode']].rename(
         columns={'location.state': 'Customer Location City', 'totalUnitsCharged': 'KWH Pumped Per Session'})
 
     # Ensure that there are no NaT values in the Actual Date column
     final_df = final_df.dropna(subset=['Actual Date'])
-    #final_df['Actual Date'] = pd.to_datetime(final_df['Actual Date']).dt.date
-
     heatmap_final_df = heatmap_final_df.dropna(subset=['Actual Date'])
 
     # Removing duplicates based on uid and bookingUid
     final_df = final_df.drop_duplicates(subset=['uid', 'bookingUid', 'Actual Date'])
-
     heatmap_final_df = heatmap_final_df.drop_duplicates(subset=['uid', 'bookingUid', 'Actual Date'])
 
     # Drop records where totalUnitsCharged is 0
     final_df = final_df[final_df['KWH Pumped Per Session'] != 0]
-
     heatmap_final_df = heatmap_final_df[heatmap_final_df['KWH Pumped Per Session'] != 0]
 
-
     # Printing the first few rows of the DataFrame for debugging
-    #st.write(final_df.head())
-    #final_df.to_csv('bookings53.csv', index=False)
+    # st.write(final_df.head())
 
     # Reading EPOD data from CSV file
     df1 = pd.read_csv('EPOD NUMBER.csv')
@@ -247,6 +217,7 @@ else:
 
     heatmap_final_df['licensePlate'] = heatmap_final_df['licensePlate'].str.upper()
     heatmap_final_df['licensePlate'] = heatmap_final_df['licensePlate'].str.replace('HR55AJ4OO3', 'HR55AJ4003')
+
     # Replace specific license plates
     replace_dict = {
         'HR551305': 'HR55AJ1305',
@@ -278,7 +249,6 @@ else:
 
     heatmap_merged_df = pd.merge(heatmap_final_df, df1, on=["licensePlate"])
     heatmap_final_df = heatmap_merged_df
-    #final_df.to_csv('bookings89000.csv', index=False)
 
     shift_data_df = heatmap_final_df.copy()
     shift_data_df = shift_data_df.drop_duplicates(subset=['shiftUid', 'Actual Date'])
@@ -287,17 +257,12 @@ else:
     shift_data_df['Shift_Hours'] = (shift_data_df['shiftEndedAt'] - shift_data_df[
         'shiftStartedAt']).dt.total_seconds() / 3600
 
-    #v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['Actual Date'])
-
     v_mode_shift_hours_df = v_mode_final_df.copy()
     v_mode_shift_hours_df = v_mode_shift_hours_df.drop_duplicates(subset=['shiftUid', 'Actual Date'])
-    # Calculate shift hours for V_Mode
     v_mode_shift_hours_df['shiftStartedAt'] = pd.to_datetime(v_mode_shift_hours_df['shiftStartedAt'])
     v_mode_shift_hours_df['shiftEndedAt'] = pd.to_datetime(v_mode_shift_hours_df['shiftEndedAt'])
     v_mode_shift_hours_df['Shift_Hours'] = (v_mode_shift_hours_df['shiftEndedAt'] - v_mode_shift_hours_df[
         'shiftStartedAt']).dt.total_seconds() / 3600
-    #v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(v_mode_shift_hours_df['Actual Date'])
-
     #filtered_drivers_df.to_csv('bookings51113.csv', index=False)
 
 
@@ -2040,13 +2005,11 @@ else:
         with col4:
             st.plotly_chart(fig_working_days)
 
-        # Ensure dates are in datetime format and remove timezone info
         heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.tz_localize(None)
         shift_data_df['Actual Date'] = pd.to_datetime(shift_data_df['Actual Date']).dt.tz_localize(None)
         v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['Actual Date']).dt.tz_localize(None)
         v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(v_mode_shift_hours_df['Actual Date']).dt.tz_localize(None)
 
-        # Filter dataframes based on the given date range
         heatmap_final_df_filtered = heatmap_final_df[
             (heatmap_final_df['Actual Date'] >= start_date) & (heatmap_final_df['Actual Date'] <= end_date)]
         shift_data_df_filtered = shift_data_df[
@@ -2056,61 +2019,44 @@ else:
         v_mode_shift_hours_df_filtered = v_mode_shift_hours_df[
             (v_mode_shift_hours_df['Actual Date'] >= start_date) & (v_mode_shift_hours_df['Actual Date'] <= end_date)]
 
-        # Calculate D Mode stats
+        # Calculate required metrics for heatmap
         d_mode_stats = heatmap_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
             Total_Sessions=('Actual Date', 'count'),
             Avg_Sessions=('Actual Date', lambda x: len(x) / x.nunique()),
             Delay_Count=('t-15_kpi', lambda x: (x == 2).sum()),
-            D_Mode=('donorVMode', lambda x: (x == 'FALSE').sum())
+            D_Mode_Sessions=('donorVMode', lambda x: (x == 'FALSE').sum()),
         ).reset_index()
 
-        # Calculate total shift hours and distinct shift count for D Mode
-        d_mode_shift_hours = shift_data_df_filtered.groupby('Actual OPERATOR NAME').agg(
-            D_Mode_Shift_Hours=('Shift_Hours', 'sum'),
-            D_Mode_Total_Shifts=('shiftUid', 'count')
-        ).reset_index()
-
-        # Merge D Mode stats with shift hours
-        d_mode_stats = pd.merge(d_mode_stats, d_mode_shift_hours, on='Actual OPERATOR NAME', how='left')
-
-        # Calculate V Mode stats
+        # Calculate V_Mode metrics
         v_mode_stats = v_mode_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
-            V_Mode=('donorVMode', lambda x: (x == 'TRUE').sum())
+            V_Mode_Sessions=('donorVMode', lambda x: (x == 'TRUE').sum()),
         ).reset_index()
 
-        # Calculate total shift hours and distinct shift count for V Mode
-        v_mode_shift_hours = v_mode_shift_hours_df_filtered.groupby('Actual OPERATOR NAME').agg(
-            V_Mode_Shift_Hours=('Shift_Hours', 'sum'),
-            V_Mode_Total_Shifts=('shiftUid', 'count')
+        # Combine D_Mode and V_Mode data for shifts
+        combined_shift_data = pd.concat([shift_data_df_filtered, v_mode_shift_hours_df_filtered]).drop_duplicates(
+            subset=['shiftUid'])
+
+        # Calculate total unique shifts and average shift hours
+        total_shifts = combined_shift_data.groupby('Actual OPERATOR NAME').agg(
+            Total_Unique_Shifts=('shiftUid', 'nunique'),
+            Avg_Shift_Hours=('Shift_Hours', 'mean')
         ).reset_index()
 
-        # Merge V Mode stats with shift hours
-        v_mode_stats = pd.merge(v_mode_stats, v_mode_shift_hours, on='Actual OPERATOR NAME', how='left')
-
-        # Merge D Mode and V Mode metrics
+        # Merge D_Mode and V_Mode metrics
         operator_stats = pd.merge(d_mode_stats, v_mode_stats, on='Actual OPERATOR NAME', how='outer').fillna(0)
 
-        # Calculate average shift hours per shift considering both D Mode and V Mode
-        operator_stats['Total_Shift_Hours'] = operator_stats['D_Mode_Shift_Hours'] + operator_stats[
-            'V_Mode_Shift_Hours']
-        operator_stats['Total_Shifts'] = operator_stats['D_Mode_Total_Shifts'] + operator_stats['V_Mode_Total_Shifts']
-        operator_stats['Avg_Shift_Hours'] = operator_stats['Total_Shift_Hours'] / operator_stats['Total_Shifts']
+        # Merge with total shifts and average shift hours
+        operator_stats = pd.merge(operator_stats, total_shifts, on='Actual OPERATOR NAME', how='left')
 
         # Rename columns for better display
-        operator_stats.columns = ['Operator', 'Total Sessions', 'Avg Sessions', 'Delay Count', 'D Mode',
-                                  'D_Mode_Shift_Hours', 'D_Mode_Total_Shifts', 'V Mode', 'V_Mode_Shift_Hours',
-                                  'V_Mode_Total_Shifts', 'Total Shift Hours', 'Total Shifts', 'Avg Shift Hours']
+        operator_stats.columns = ['Operator', 'Total Sessions', 'Avg Sessions', 'Delay Count', 'D Mode Sessions', 'V Mode Sessions', 'Total Unique Shifts', 'Avg Shift Hours']
 
-        # Display the table without D Mode and V Mode Shift Hours columns, but with Total Shifts
+        # Display the table
         st.markdown("### Operator Statistics Table")
-        st.table(operator_stats[
-                     ['Operator', 'Total Sessions', 'Avg Sessions', 'D Mode', 'Delay Count', 'V Mode', 'Total Shifts',
-                      'Avg Shift Hours']])
+        st.table(operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts', 'Avg Shift Hours', 'Delay Count', 'D Mode Sessions', 'V Mode Sessions']])
 
         # Export the table to CSV
-        csv = operator_stats[
-            ['Operator', 'Total Sessions', 'Avg Sessions', 'D Mode', 'Delay Count', 'V Mode', 'Total Shifts',
-             'Avg Shift Hours']].to_csv(index=False)
+        csv = operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts', 'Avg Shift Hours', 'Delay Count', 'D Mode Sessions', 'V Mode Sessions']].to_csv(index=False)
 
         st.download_button(
             label="Download data as CSV",
