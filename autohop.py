@@ -129,8 +129,8 @@ def main_page(username):
             return pd.DataFrame()  # Return an empty DataFrame if 'data' key is not found
 
     # URLs for the APIs
-    url_bookings = "https://2e855a4f93a0.api.hopcharge.com/admin/api/v1/bookings/past?filter={\"chargedAt_lte\":\"2024-06-01\",\"chargedAt_gte\":\"2024-07-30\"}&range=[0,300000]&sort=[\"created\",\"DESC\"]"
-    url_drivers = "https://2e855a4f93a0.api.hopcharge.com/admin/api/v1/drivers-shifts/export-list?filter={\"action\":\"exporter\",\"startedAt_lte\":\"2024-06-01\",\"endedAt_gte\":\"2024-07-30\"}"
+    url_bookings = "https://2e855a4f93a0.api.hopcharge.com/admin/api/v1/bookings/past?filter={\"chargedAt_lte\":\"2024-06-01\",\"chargedAt_gte\":\"2024-12-30\"}&range=[0,300000]&sort=[\"created\",\"DESC\"]"
+    url_drivers = "https://2e855a4f93a0.api.hopcharge.com/admin/api/v1/drivers-shifts/export-list?filter={\"action\":\"exporter\",\"startedAt_lte\":\"2024-06-01\",\"endedAt_gte\":\"2024-12-30\"}"
 
     # Fetch data from the APIs
     past_bookings_df = fetch_data(url_bookings)
