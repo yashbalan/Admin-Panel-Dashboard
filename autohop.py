@@ -18,6 +18,7 @@ from plotly.subplots import make_subplots
 
 st.set_page_config(layout="wide", page_title="Hopcharge Dashboard", page_icon=":bar_chart:")
 
+
 # Function to clean license plates
 def clean_license_plate(plate):
     match = re.match(r"([A-Z]+[0-9]+)(_R)$", plate)
@@ -26,12 +27,11 @@ def clean_license_plate(plate):
     return plate
 
 
-
-
 def convert_to_datetime_with_current_year(date_string):
     current_year = datetime.now().year
     date = pd.to_datetime(date_string, errors='coerce')
     return date.replace(year=current_year)
+
 
 def check_credentials():
     st.markdown(
@@ -2256,12 +2256,10 @@ def main_page(username):
             with col4:
                 st.plotly_chart(fig_working_days)
 
-            heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.tz_localize(
-                None)
+            heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.tz_localize(None)
             shift_data_df['Actual Date'] = pd.to_datetime(shift_data_df['Actual Date']).dt.tz_localize(None)
             v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['Actual Date']).dt.tz_localize(None)
-            v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(
-                v_mode_shift_hours_df['Actual Date']).dt.tz_localize(
+            v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(v_mode_shift_hours_df['Actual Date']).dt.tz_localize(
                 None)
 
             heatmap_final_df_filtered = heatmap_final_df[
@@ -2272,7 +2270,7 @@ def main_page(username):
                 (v_mode_final_df['Actual Date'] >= start_date) & (v_mode_final_df['Actual Date'] <= end_date)]
             v_mode_shift_hours_df_filtered = v_mode_shift_hours_df[
                 (v_mode_shift_hours_df['Actual Date'] >= start_date) & (
-                        v_mode_shift_hours_df['Actual Date'] <= end_date)]
+                            v_mode_shift_hours_df['Actual Date'] <= end_date)]
 
             # Calculate required metrics for heatmap
             d_mode_stats = heatmap_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
@@ -2289,39 +2287,44 @@ def main_page(username):
 
             # Combine D_Mode and V_Mode data for shifts
             combined_shift_data = pd.concat(
-                [shift_data_df_filtered, v_mode_shift_hours_df_filtered]).drop_duplicates(
-                subset=['shiftUid'])
+                [shift_data_df_filtered, v_mode_shift_hours_df_filtered]).drop_duplicates(subset=['shiftUid'])
 
-            # Calculate total unique shifts and average shift hours
+            # Calculate total unique shifts, total shift hours, and average shift hours
             total_shifts = combined_shift_data.groupby('Actual OPERATOR NAME').agg(
                 Total_Unique_Shifts=('shiftUid', 'nunique'),
+                Total_Shift_Hours=('Shift_Hours', 'sum'),
                 Avg_Shift_Hours=('Shift_Hours', 'mean')
             ).reset_index()
 
             # Merge D_Mode and V_Mode metrics
-            operator_stats = pd.merge(d_mode_stats, v_mode_stats, on='Actual OPERATOR NAME',
-                                      how='outer').fillna(0)
+            operator_stats = pd.merge(d_mode_stats, v_mode_stats, on='Actual OPERATOR NAME', how='outer').fillna(0)
 
             # Merge with total shifts and average shift hours
             operator_stats = pd.merge(operator_stats, total_shifts, on='Actual OPERATOR NAME', how='left')
 
+            # Format the data to remove unnecessary decimals except for averages
+            operator_stats['Total_Sessions'] = operator_stats['Total_Sessions'].astype(int)
+            operator_stats['Delay_Count'] = operator_stats['Delay_Count'].astype(int)
+            operator_stats['D_Mode_Sessions'] = operator_stats['D_Mode_Sessions'].astype(int)
+            operator_stats['V_Mode_Sessions'] = operator_stats['V_Mode_Sessions'].astype(int)
+            operator_stats['Total_Unique_Shifts'] = operator_stats['Total_Unique_Shifts'].astype(int)
+            operator_stats['Total_Shift_Hours'] = operator_stats['Total_Shift_Hours'].round(2)
+
             # Rename columns for better display
             operator_stats.columns = ['Operator', 'Total Sessions', 'Avg Sessions', 'Delay Count',
-                                      'D Mode Sessions',
-                                      'V Mode Sessions', 'Total Unique Shifts', 'Avg Shift Hours']
+                                      'D Mode Sessions', 'V Mode Sessions', 'Total Unique Shifts',
+                                      'Total Shift Hours', 'Avg Shift Hours']
 
             # Display the table
             st.markdown("### Operator Statistics Table")
-            st.table(operator_stats[
-                         ['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
-                          'Avg Shift Hours',
-                          'Delay Count', 'D Mode Sessions', 'V Mode Sessions']])
+            st.table(operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
+                                     'Total Shift Hours', 'Avg Shift Hours', 'Delay Count',
+                                     'D Mode Sessions', 'V Mode Sessions']])
 
             # Export the table to CSV
-            csv = operator_stats[
-                ['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts', 'Avg Shift Hours',
-                 'Delay Count',
-                 'D Mode Sessions', 'V Mode Sessions']].to_csv(index=False)
+            csv = operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
+                                  'Total Shift Hours', 'Avg Shift Hours', 'Delay Count',
+                                  'D Mode Sessions', 'V Mode Sessions']].to_csv(index=False)
 
             st.download_button(
                 label="Download data as CSV",
@@ -2450,9 +2453,10 @@ def main_page(username):
             else:
                 st.markdown("Please upload a valid file to see the data.")
 
+
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
-            
+
 if st.session_state.logged_in:
     main_page(st.session_state.username)
 else:
@@ -2461,4 +2465,3 @@ else:
         st.session_state.logged_in = True
         st.session_state.username = ans[0]
         st.experimental_rerun()
-            
