@@ -2307,7 +2307,6 @@ def main_page(username):
             operator_stats['Delay_Count'] = operator_stats['Delay_Count'].astype(int)
             operator_stats['D_Mode_Sessions'] = operator_stats['D_Mode_Sessions'].astype(int)
             operator_stats['V_Mode_Sessions'] = operator_stats['V_Mode_Sessions'].astype(int)
-            operator_stats['Total_Unique_Shifts'] = operator_stats['Total_Unique_Shifts'].astype(int)
             operator_stats['Total_Shift_Hours'] = operator_stats['Total_Shift_Hours'].round(2)
 
             # Rename columns for better display
