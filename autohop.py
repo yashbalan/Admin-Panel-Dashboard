@@ -2395,7 +2395,7 @@ def main_page(username):
 
                         # Ensure 'Total' column is ignored
                         if 'Total' in df.columns:
-                            df = df.drop(columns(['Total']))
+                            df = df.drop(columns=(['Total']))
 
                         # Remove rows where 'Name' is "Total" or "TOTAL"
                         df = df[~df['Name'].str.lower().isin(['total'])]
