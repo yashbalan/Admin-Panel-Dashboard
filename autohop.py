@@ -2516,10 +2516,10 @@ def main_page(username):
                         min_date = final_df['Actual Date'].min().date()
                         max_date = final_df['Actual Date'].max().date()
                         start_date = st.date_input('Start Date', min_value=min_date, max_value=max_date, value=min_date,
-                                                   key="epod-date-start")
+                                                   key="epod-date-start-key")
                     with col2:
                         end_date = st.date_input('End Date', min_value=min_date, max_value=max_date, value=max_date,
-                                                 key="epod-date-end")
+                                                 key="epod-date-end-key")
 
                     # File uploader for KM data
                     st.markdown("#### Upload KM Data (CSV or Excel)")
