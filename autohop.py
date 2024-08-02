@@ -2374,14 +2374,15 @@ def main_page(username):
                     min_date = final_df['Actual Date'].min().date()
                     max_date = final_df['Actual Date'].max().date()
                     start_date = st.date_input('Start Date', min_value=min_date, max_value=max_date, value=min_date,
-                                               key="epod-date-start")
+                                               key="epod-date-start-tab7")
                 with col2:
                     end_date = st.date_input('End Date', min_value=min_date, max_value=max_date, value=max_date,
-                                             key="epod-date-end")
+                                             key="epod-date-end-tab7")
 
                 # File uploader for KM data
                 st.markdown("### Upload KM Data (CSV or Excel)")
-                uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx"], accept_multiple_files=True)
+                uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx"], accept_multiple_files=True,
+                                                 key="km-file-upload-tab7")
 
                 # Function to process and merge all uploaded files
                 def process_files(files):
@@ -2457,12 +2458,13 @@ def main_page(username):
                     # Calculate the overall average KM per session across all EPODs
                     overall_avg_km_per_session = avg_km_per_session_df['Avg KM per Session'].mean()
 
-                    st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM")
+                    st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM",
+                              key="overall-avg-km-tab7")
 
                     # Plotting the average kilometers per EPOD per session
                     fig = px.bar(avg_km_per_session_df, x='EPOD Name', y='Avg KM per Session',
                                  title='Average KM Travelled per Session by EPOD')
-                    st.plotly_chart(fig)
+                    st.plotly_chart(fig, use_container_width=True)
 
                     # Identify the most and least efficient EPODs based on average KM per session
                     most_efficient_epod = avg_km_per_session_df.loc[
