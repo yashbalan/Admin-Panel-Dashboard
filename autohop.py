@@ -2374,10 +2374,10 @@ def main_page(username):
                     min_date = final_df['Actual Date'].min().date()
                     max_date = final_df['Actual Date'].max().date()
                     start_date = st.date_input('Start Date', min_value=min_date, max_value=max_date, value=min_date,
-                                               key="epod-date-start-key")
+                                               key="epod-date-start")
                 with col2:
                     end_date = st.date_input('End Date', min_value=min_date, max_value=max_date, value=max_date,
-                                             key="epod-date-end-key")
+                                             key="epod-date-end")
 
                 # File uploader for KM data
                 st.markdown("### Upload KM Data (CSV or Excel)")
@@ -2449,23 +2449,15 @@ def main_page(username):
                     avg_km_per_session_df['Avg KM per Session'] = avg_km_per_session_df['KM Travelled for Session'] / \
                                                                   avg_km_per_session_df['Total Sessions']
 
-                    # Display the overall average KM per session
-                    col1, col2, col3 = st.columns(3)
-
                     # Display the result
                     st.markdown("### Average KM Travelled per Session by EPOD")
-                    with col1:
-                        # Reorganize columns to include Total KMs, Total Sessions, and Avg KM per Session
-                        display_df = avg_km_per_session_df[
-                            ['EPOD Name', 'KM Travelled for Session', 'Total Sessions', 'Avg KM per Session']]
-
-                        st.write(display_df)
+                    st.write(avg_km_per_session_df[
+                                 ['EPOD Name', 'KM Travelled for Session', 'Total Sessions', 'Avg KM per Session']])
 
                     # Calculate the overall average KM per session across all EPODs
                     overall_avg_km_per_session = avg_km_per_session_df['Avg KM per Session'].mean()
 
-                    with col3:
-                        st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM")
+                    st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM")
 
                     # Plotting the average kilometers per EPOD per session
                     fig = px.bar(avg_km_per_session_df, x='EPOD Name', y='Avg KM per Session',
@@ -2486,8 +2478,6 @@ def main_page(username):
                 else:
                     st.markdown("Please upload a valid file to see the data.")
 
-    else:
-        st.error("Could not retrieve data due to failed authentication.")
 
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
