@@ -2516,10 +2516,10 @@ def main_page(username):
                         min_date = final_df['Actual Date'].min().date()
                         max_date = final_df['Actual Date'].max().date()
                         start_date = st.date_input('Start Date', min_value=min_date, max_value=max_date, value=min_date,
-                                                   key="epod-date-start-key")
+                                                   key="epod-date-start")
                     with col2:
                         end_date = st.date_input('End Date', min_value=min_date, max_value=max_date, value=max_date,
-                                                 key="epod-date-end-key")
+                                                 key="epod-date-end")
 
                     # File uploader for KM data
                     st.markdown("#### Upload KM Data (CSV or Excel)")
@@ -2610,6 +2610,21 @@ def main_page(username):
                         # Remove records with None values
                         date_wise_analysis = date_wise_analysis.dropna()
 
+                        # Calculate total KM, total sessions, and average KM for each date
+                        total_km_per_date = date_wise_analysis.groupby('Actual Date')['KM Travelled for Session'].sum()
+                        total_sessions_per_date = date_wise_analysis.groupby('Actual Date')['Total Sessions'].sum()
+                        avg_km_per_date = total_km_per_date / total_sessions_per_date
+
+                        # Add summary to the date-wise analysis table
+                        summary_data = pd.DataFrame({
+                            'EPOD Name': ['Summary'] * 3,
+                            'Metric': ['Total KM', 'Total Sessions', 'Avg KM'],
+                        })
+
+                        for date in total_km_per_date.index:
+                            summary_data[date] = [total_km_per_date[date], total_sessions_per_date[date],
+                                                  avg_km_per_date[date]]
+
                         # Prepare the data by stacking the metrics for each EPOD and date
                         stacked_metrics_df = date_wise_analysis.set_index(
                             ['EPOD Name', 'Actual Date']).stack().reset_index()
@@ -2619,6 +2634,9 @@ def main_page(username):
                         pivot_table = stacked_metrics_df.pivot_table(index=['EPOD Name', 'Metric'],
                                                                      columns='Actual Date',
                                                                      values='Value', aggfunc='first')
+
+                        # Append the summary to the pivot table
+                        pivot_table = pd.concat([pivot_table, summary_data.set_index(['EPOD Name', 'Metric'])])
 
                         # Display the date-wise analysis table
                         st.markdown("##### Date-wise Analysis")
