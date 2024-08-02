@@ -2509,124 +2509,164 @@ def main_page(username):
                     merged_df = pd.merge(final_df, df1, on=["licensePlate"])
                     final_df = merged_df
 
-                # Date filters and data upload
-                col1, col2 = st.columns(2)
-                with col1:
-                    final_df['Actual Date'] = pd.to_datetime(final_df['Actual Date'], errors='coerce')
-                    min_date = final_df['Actual Date'].min().date()
-                    max_date = final_df['Actual Date'].max().date()
-                    start_date = st.date_input('Start Date', min_value=min_date, max_value=max_date, value=min_date,
-                                               key="epod-date-start-tab7")
-                with col2:
-                    end_date = st.date_input('End Date', min_value=min_date, max_value=max_date, value=max_date,
-                                             key="epod-date-end-tab7")
-
-                # File uploader for KM data
-                st.markdown("### Upload KM Data (CSV or Excel)")
-                uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx"], accept_multiple_files=True)
-
-                # Function to process and merge all uploaded files
-                def process_files(files):
-                    dataframes = []
-                    for file in files:
-                        if file.name.endswith('.csv'):
-                            df = pd.read_csv(file)
-                        else:
-                            df = pd.read_excel(file)
-
-                        # Ensure 'Total' column is ignored
-                        if 'Total' in df.columns:
-                            df = df.drop(columns=['Total'])
-
-                        # Remove rows where 'Name' is "Total" or "TOTAL"
-                        df = df[~df['Name'].str.lower().isin(['total'])]
-
-                        dataframes.append(df)
-
-                    # Merge all dataframes
-                    merged_df = pd.concat(dataframes, ignore_index=True)
-
-                    # Melt the dataframe to convert dates to rows
-                    id_vars = ['Name', 'Number', 'Year', 'Make', 'Model', 'Fuel Type', 'Driver Name', 'Driver Number']
-                    value_vars = merged_df.columns.difference(id_vars)
-                    vehicle_df_melted = pd.melt(merged_df, id_vars=id_vars, value_vars=value_vars,
-                                                var_name='Actual Date', value_name='KM Travelled for Session')
-
-                    # Strip any leading/trailing spaces from 'Actual Date'
-                    vehicle_df_melted['Actual Date'] = vehicle_df_melted['Actual Date'].str.strip()
-
-                    # Convert the 'Actual Date' column to datetime
-                    vehicle_df_melted['Actual Date'] = pd.to_datetime(vehicle_df_melted['Actual Date'], format='%d/%m',
-                                                                      errors='coerce', dayfirst=True)
-                    vehicle_df_melted = vehicle_df_melted.dropna(
-                        subset=['Actual Date'])  # Drop rows where date conversion failed
-                    vehicle_df_melted['Actual Date'] = vehicle_df_melted['Actual Date'].apply(
-                        lambda x: x.replace(year=datetime.now().year))
-
-                    vehicle_df_melted['KM Travelled for Session'] = vehicle_df_melted[
-                        'KM Travelled for Session'].replace(
-                        '-', 0).astype(float)
-                    vehicle_df_melted = vehicle_df_melted.dropna(subset=['KM Travelled for Session'])
-
-                    total_kms = vehicle_df_melted.groupby('Name')['KM Travelled for Session'].sum().reset_index()
-                    total_kms.rename(columns={'Name': 'EPOD Name'}, inplace=True)
-
-                    return total_kms
-
-                if uploaded_file:
-                    total_kms_df = process_files(uploaded_file)
-
-                    # Filter the final_df based on selected date range
-                    filtered_final_df = final_df[(final_df['Actual Date'] >= pd.to_datetime(start_date)) &
-                                                 (final_df['Actual Date'] <= pd.to_datetime(end_date))]
-
-                    # Calculate the total number of sessions per EPOD using t-15_kpi
-                    total_sessions_per_epod = filtered_final_df.groupby('EPOD Name')['t-15_kpi'].count().reset_index(
-                        name='Total Sessions')
-
-                    # Merge total KM data with session data
-                    avg_km_per_session_df = pd.merge(total_kms_df, total_sessions_per_epod, on='EPOD Name', how='inner')
-
-                    # Calculate the average KM traveled per session by each EPOD
-                    avg_km_per_session_df['Avg KM per Session'] = avg_km_per_session_df['KM Travelled for Session'] / \
-                                                                  avg_km_per_session_df['Total Sessions']
-
-                    # Display the overall average KM per session
-                    col1, col2, col3 = st.columns(3)
-
-                    # Display the result
-                    st.markdown("### Average KM Travelled per Session by EPOD")
+                    # Date filters and data upload
+                    col1, col2 = st.columns(2)
                     with col1:
-                        # Reorganize columns to include Total KMs, Total Sessions, and Avg KM per Session
-                        display_df = avg_km_per_session_df[
-                            ['EPOD Name', 'KM Travelled for Session', 'Total Sessions', 'Avg KM per Session']]
+                        final_df['Actual Date'] = pd.to_datetime(final_df['Actual Date'], errors='coerce')
+                        min_date = final_df['Actual Date'].min().date()
+                        max_date = final_df['Actual Date'].max().date()
+                        start_date = st.date_input('Start Date', min_value=min_date, max_value=max_date, value=min_date,
+                                                   key="epod-date-start")
+                    with col2:
+                        end_date = st.date_input('End Date', min_value=min_date, max_value=max_date, value=max_date,
+                                                 key="epod-date-end")
 
-                        st.write(display_df)
+                    # File uploader for KM data
+                    st.markdown("#### Upload KM Data (CSV or Excel)")
+                    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx"], accept_multiple_files=True)
 
-                    # Calculate the overall average KM per session across all EPODs
-                    overall_avg_km_per_session = avg_km_per_session_df['Avg KM per Session'].mean()
+                    # Function to process and merge all uploaded files
+                    def process_files(files):
+                        dataframes = []
+                        for file in files:
+                            if file.name.endswith('.csv'):
+                                df = pd.read_csv(file)
+                            else:
+                                df = pd.read_excel(file)
 
-                    with col3:
-                        st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM")
+                            # Ensure 'Total' column is ignored
+                            if 'Total' in df.columns:
+                                df = df.drop(columns=['Total'])
 
-                    # Plotting the average kilometers per EPOD per session
-                    fig = px.bar(avg_km_per_session_df, x='EPOD Name', y='Avg KM per Session',
-                                 title='Average KM Travelled per Session by EPOD')
-                    st.plotly_chart(fig)
+                            # Remove rows where 'Name' is "Total" or "TOTAL"
+                            df = df[~df['Name'].str.lower().isin(['total'])]
 
-                    # Identify the most and least efficient EPODs based on average KM per session
-                    most_efficient_epod = avg_km_per_session_df.loc[
-                        avg_km_per_session_df['Avg KM per Session'].idxmin()]
-                    least_efficient_epod = avg_km_per_session_df.loc[
-                        avg_km_per_session_df['Avg KM per Session'].idxmax()]
+                            dataframes.append(df)
 
-                    st.markdown(
-                        f"**Most Efficient EPOD:** {most_efficient_epod['EPOD Name']} with {most_efficient_epod['Avg KM per Session']:.2f} KM per session")
-                    st.markdown(
-                        f"**Least Efficient EPOD:** {least_efficient_epod['EPOD Name']} with {least_efficient_epod['Avg KM per Session']:.2f} KM per session")
+                        # Merge all dataframes
+                        merged_df = pd.concat(dataframes, ignore_index=True)
 
-                else:
-                    st.markdown("Please upload a valid file to see the data.")
+                        # Melt the dataframe to convert dates to rows
+                        id_vars = ['Name', 'Number', 'Year', 'Make', 'Model', 'Fuel Type', 'Driver Name',
+                                   'Driver Number']
+                        value_vars = merged_df.columns.difference(id_vars)
+                        vehicle_df_melted = pd.melt(merged_df, id_vars=id_vars, value_vars=value_vars,
+                                                    var_name='Actual Date', value_name='KM Travelled for Session')
+
+                        # Strip any leading/trailing spaces from 'Actual Date'
+                        vehicle_df_melted['Actual Date'] = vehicle_df_melted['Actual Date'].str.strip()
+
+                        # Convert the 'Actual Date' column to datetime
+                        vehicle_df_melted['Actual Date'] = pd.to_datetime(vehicle_df_melted['Actual Date'],
+                                                                          format='%d/%m',
+                                                                          errors='coerce', dayfirst=True)
+                        vehicle_df_melted = vehicle_df_melted.dropna(
+                            subset=['Actual Date'])  # Drop rows where date conversion failed
+                        vehicle_df_melted['Actual Date'] = vehicle_df_melted['Actual Date'].apply(
+                            lambda x: x.replace(year=datetime.now().year))
+
+                        vehicle_df_melted['KM Travelled for Session'] = vehicle_df_melted[
+                            'KM Travelled for Session'].replace(
+                            '-', 0).astype(float)
+                        vehicle_df_melted = vehicle_df_melted.dropna(subset=['KM Travelled for Session'])
+
+                        return vehicle_df_melted
+
+                    if uploaded_file:
+                        vehicle_data_df = process_files(uploaded_file)
+
+                        # Filter the final_df based on selected date range
+                        filtered_final_df = final_df[(final_df['Actual Date'] >= pd.to_datetime(start_date)) &
+                                                     (final_df['Actual Date'] <= pd.to_datetime(end_date))]
+
+                        # Calculate the total number of sessions per EPOD using t-15_kpi
+                        total_sessions_per_epod = filtered_final_df.groupby('EPOD Name')[
+                            't-15_kpi'].count().reset_index(
+                            name='Total Sessions')
+
+                        # Group by 'EPOD Name' and 'Actual Date' to get Total KM and Total Sessions per date
+                        date_wise_km = vehicle_data_df.groupby(['Name', 'Actual Date'])[
+                            'KM Travelled for Session'].sum().reset_index()
+                        date_wise_sessions = filtered_final_df.groupby(['EPOD Name', 'Actual Date'])[
+                            't-15_kpi'].count().reset_index(
+                            name='Total Sessions')
+
+                        # Merge KM and Sessions data, avoiding duplicate column names
+                        date_wise_analysis = pd.merge(date_wise_km, date_wise_sessions,
+                                                      left_on=['Name', 'Actual Date'],
+                                                      right_on=['EPOD Name', 'Actual Date'],
+                                                      how='outer').drop(columns=['EPOD Name'])
+
+                        # Calculate Avg KM per Session
+                        date_wise_analysis['Avg KM per Session'] = date_wise_analysis['KM Travelled for Session'] / \
+                                                                   date_wise_analysis['Total Sessions']
+
+                        # Rename columns for clarity
+                        date_wise_analysis.rename(columns={'Name': 'EPOD Name'}, inplace=True)
+
+                        # Format the dates as "1 June 2024"
+                        date_wise_analysis['Actual Date'] = date_wise_analysis['Actual Date'].dt.strftime('%-d %B %Y')
+
+                        # Remove records with None values
+                        date_wise_analysis = date_wise_analysis.dropna()
+
+                        # Prepare the data by stacking the metrics for each EPOD and date
+                        stacked_metrics_df = date_wise_analysis.set_index(
+                            ['EPOD Name', 'Actual Date']).stack().reset_index()
+                        stacked_metrics_df.columns = ['EPOD Name', 'Actual Date', 'Metric', 'Value']
+
+                        # Pivot the data to get unique EPODs on vertical side and dates on horizontal top
+                        pivot_table = stacked_metrics_df.pivot_table(index=['EPOD Name', 'Metric'],
+                                                                     columns='Actual Date',
+                                                                     values='Value', aggfunc='first')
+
+                        # Display the date-wise analysis table
+                        st.markdown("##### Date-wise Analysis")
+                        st.write(pivot_table)
+
+                        # Continue with previous analysis for Average KM per Session by EPOD
+                        total_kms = vehicle_data_df.groupby('Name')['KM Travelled for Session'].sum().reset_index()
+                        total_kms.rename(columns={'Name': 'EPOD Name'}, inplace=True)
+
+                        avg_km_per_session_df = pd.merge(total_kms, total_sessions_per_epod, on='EPOD Name',
+                                                         how='inner')
+
+                        # Calculate the average KM traveled per session by each EPOD
+                        avg_km_per_session_df['Avg KM per Session'] = avg_km_per_session_df[
+                                                                          'KM Travelled for Session'] / \
+                                                                      avg_km_per_session_df['Total Sessions']
+
+                        # Display the result
+                        st.markdown("#### Monthly Average KM Travelled per Session by EPOD")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.write(avg_km_per_session_df[
+                                         ['EPOD Name', 'KM Travelled for Session', 'Total Sessions',
+                                          'Avg KM per Session']])
+
+                        # Calculate the overall average KM per session across all EPODs
+                        overall_avg_km_per_session = avg_km_per_session_df['Avg KM per Session'].mean()
+                        with col3:
+                            st.metric("Monthly Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM")
+
+                        # Plotting the average kilometers per EPOD per session
+                        fig = px.bar(avg_km_per_session_df, x='EPOD Name', y='Avg KM per Session',
+                                     title='Average KM Travelled per Session by EPOD')
+                        st.plotly_chart(fig)
+
+                        # Identify the most and least efficient EPODs based on average KM per session
+                        most_efficient_epod = avg_km_per_session_df.loc[
+                            avg_km_per_session_df['Avg KM per Session'].idxmin()]
+                        least_efficient_epod = avg_km_per_session_df.loc[
+                            avg_km_per_session_df['Avg KM per Session'].idxmax()]
+
+                        st.markdown(
+                            f"**Most Efficient EPOD:** {most_efficient_epod['EPOD Name']} with {most_efficient_epod['Avg KM per Session']:.2f} KM per session")
+                        st.markdown(
+                            f"**Least Efficient EPOD:** {least_efficient_epod['EPOD Name']} with {least_efficient_epod['Avg KM per Session']:.2f} KM per session")
+
+                    else:
+                        st.markdown("Please upload a valid file to see the data.")
 
 
 if 'logged_in' not in st.session_state:
