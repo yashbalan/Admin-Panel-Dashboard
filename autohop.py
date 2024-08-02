@@ -2395,7 +2395,7 @@ def main_page(username):
 
                         # Ensure 'Total' column is ignored
                         if 'Total' in df.columns:
-                            df = df.drop(columns=['Total'])
+                            df = df.drop(columns(['Total']))
 
                         # Remove rows where 'Name' is "Total" or "TOTAL"
                         df = df[~df['Name'].str.lower().isin(['total'])]
@@ -2458,8 +2458,7 @@ def main_page(username):
                     # Calculate the overall average KM per session across all EPODs
                     overall_avg_km_per_session = avg_km_per_session_df['Avg KM per Session'].mean()
 
-                    st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM",
-                              key="overall-avg-km-tab7")
+                    st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM")
 
                     # Plotting the average kilometers per EPOD per session
                     fig = px.bar(avg_km_per_session_df, x='EPOD Name', y='Avg KM per Session',
