@@ -2367,6 +2367,148 @@ def main_page(username):
                 )
 
             with tab7:
+                # Check if the DataFrame is empty
+                if past_bookings_df.empty or drivers_shifts_df.empty:
+                    st.error("No data found in the API response.")
+                else:
+                    # Printing the first few rows of the DataFrame for debugging
+                    print(past_bookings_df.head())
+                    print(drivers_shifts_df.head())
+
+                    past_bookings_df['Customer Name'] = past_bookings_df['firstName'] + " " + past_bookings_df[
+                        'lastName']
+                    past_bookings_df['optChargeStartTime'] = pd.to_datetime(past_bookings_df['optChargeStartTime'],
+                                                                            format='mixed',
+                                                                            errors='coerce')
+                    past_bookings_df['optChargeEndTime'] = pd.to_datetime(past_bookings_df['optChargeEndTime'],
+                                                                          format='mixed',
+                                                                          errors='coerce')
+                    past_bookings_df['Reach Time'] = pd.to_datetime(past_bookings_df['optChargeStartTime'],
+                                                                    format='mixed',
+                                                                    errors='coerce')
+                    past_bookings_df.rename(columns={
+                        'optBatteryBeforeChrg': 'Actual SoC_Start',
+                        'optBatteryAfterChrg': 'Actual SoC_End'
+                    }, inplace=True)
+                    past_bookings_df['Booking Session time'] = pd.to_datetime(past_bookings_df['fromTime'],
+                                                                              format='mixed',
+                                                                              errors='coerce')
+
+                    # Combine 'driverFirstName' and 'driverLastName' into 'Actual OPERATOR NAME'
+                    past_bookings_df['Actual OPERATOR NAME'] = past_bookings_df['driverFirstName'] + ' ' + \
+                                                               past_bookings_df[
+                                                                   'driverLastName']
+
+                    # Calculate t-15_kpi
+                    def calculate_t_minus_15(row):
+                        booking_time = row['Booking Session time']
+                        arrival_time = row['Reach Time']
+
+                        time_diff = booking_time - arrival_time
+
+                        if time_diff >= timedelta(minutes=15):
+                            return 1
+                        elif time_diff < timedelta(seconds=0):
+                            return 2
+                        else:
+                            return 0
+
+                    # Apply the function to calculate t-15_kpi
+                    past_bookings_df['t-15_kpi'] = past_bookings_df.apply(calculate_t_minus_15, axis=1)
+
+                    if 'cancelledPenalty' not in past_bookings_df.columns:
+                        past_bookings_df['cancelledPenalty'] = 0
+                        past_bookings_df.loc[
+                            (past_bookings_df['canceled'] == True) & (
+                                    (past_bookings_df['optChargeStartTime'] - past_bookings_df[
+                                        'Reach Time']).dt.total_seconds() / 60 < 15), 'cancelledPenalty'] = 1
+
+                    # Filter where donorVMode is False
+                    filtered_drivers_df = drivers_shifts_df[drivers_shifts_df['donorVMode'] == 'FALSE']
+                    filtered_drivers_df = filtered_drivers_df.drop_duplicates(subset=['bookingUid'])
+
+                    filtered_drivers_df = drivers_shifts_df[drivers_shifts_df['bookingStatus'] == 'completed']
+
+                    # Cleaning license plates
+                    filtered_drivers_df['licensePlate'] = filtered_drivers_df['licensePlate'].apply(clean_license_plate)
+
+                    # past_bookings_df.to_csv('bookings3.csv', index=False)
+
+                    # Extracting Customer Location City by matching bookingUid with uid from past_bookings_df
+                    merged_df = pd.merge(filtered_drivers_df,
+                                         past_bookings_df[
+                                             ['uid', 'location.state', 'Customer Name', 'Actual OPERATOR NAME',
+                                              'optChargeStartTime', 'optChargeEndTime', 'Reach Time',
+                                              'Actual SoC_Start',
+                                              'Actual SoC_End', 'Booking Session time', 'canceled',
+                                              'cancelledPenalty', 't-15_kpi', 'subscriptionName',
+                                              'location.lat', 'location.long']],
+                                         left_on='bookingUid', right_on='uid', how='left')
+
+                    # Extracting Actual Date from fromTime
+                    # merged_df['Actual Date'] = pd.to_datetime(merged_df['fromTime'], errors='coerce')
+
+                    # Extracting Actual Date from bookingFromTime
+                    merged_df['Actual Date'] = pd.to_datetime(merged_df['bookingFromTime'], errors='coerce')
+
+                    # Ensure necessary columns are present, and calculate additional columns if needed
+                    if 'Day' not in merged_df.columns:
+                        merged_df['Day'] = merged_df['Actual Date'].dt.day_name()
+
+                    # Selecting and renaming the required columns
+                    final_df = merged_df[
+                        ['Actual Date', 'licensePlate', 'location.state', 'bookingUid', 'uid', 'bookingFromTime',
+                         'bookingStatus', 'customerUid', 'totalUnitsCharged', 'Customer Name', 'Actual OPERATOR NAME',
+                         'optChargeStartTime', 'optChargeEndTime', 'Day', 'Reach Time', 'Actual SoC_Start',
+                         'Actual SoC_End', 'Booking Session time', 'canceled',
+                         'cancelledPenalty', 't-15_kpi', 'subscriptionName',
+                         'location.lat', 'location.long', 'donorVMode']].rename(
+                        columns={'location.state': 'Customer Location City',
+                                 'totalUnitsCharged': 'KWH Pumped Per Session'})
+
+                    # Ensure that there are no NaT values in the Actual Date column
+                    final_df = final_df.dropna(subset=['Actual Date'])
+                    # final_df['Actual Date'] = pd.to_datetime(final_df['Actual Date']).dt.date
+
+                    # Removing duplicates based on uid and bookingUid
+                    final_df = final_df.drop_duplicates(subset=['uid', 'bookingUid', 'Actual Date'])
+
+                    # Drop records where totalUnitsCharged is 0
+                    final_df = final_df[final_df['KWH Pumped Per Session'] != 0]
+
+                    # Printing the first few rows of the DataFrame for debugging
+                    # st.write(final_df.head())
+                    # final_df.to_csv('bookings53.csv', index=False)
+
+                    # Reading EPOD data from CSV file
+                    df1 = pd.read_csv('EPOD NUMBER.csv')
+
+                    # Data cleaning and transformation
+                    final_df['licensePlate'] = final_df['licensePlate'].str.upper()
+                    final_df['licensePlate'] = final_df['licensePlate'].str.replace('HR55AJ4OO3', 'HR55AJ4003')
+
+                    # Replace specific license plates
+                    replace_dict = {
+                        'HR551305': 'HR55AJ1305',
+                        'HR552932': 'HR55AJ2932',
+                        'HR551216': 'HR55AJ1216',
+                        'HR555061': 'HR55AN5061',
+                        'HR554745': 'HR55AR4745',
+                        'HR55AN1216': 'HR55AJ1216',
+                        'HR55AN8997': 'HR55AN8997'
+                    }
+                    final_df['licensePlate'] = final_df['licensePlate'].replace(replace_dict)
+                    final_df['Actual Date'] = pd.to_datetime(final_df['Actual Date'], format='mixed', errors='coerce')
+                    final_df = final_df[final_df['Actual Date'].dt.year > 2021]
+                    final_df['Actual Date'] = final_df['Actual Date'].dt.date
+                    final_df['Customer Location City'].replace({'Haryana': 'Gurugram', 'Uttar Pradesh': 'Noida'},
+                                                               inplace=True)
+                    cities = ['Gurugram', 'Noida', 'Delhi']
+                    final_df = final_df[final_df['Customer Location City'].isin(cities)]
+
+                    merged_df = pd.merge(final_df, df1, on=["licensePlate"])
+                    final_df = merged_df
+
                 # Date filters and data upload
                 col1, col2 = st.columns(2)
                 with col1:
@@ -2381,8 +2523,7 @@ def main_page(username):
 
                 # File uploader for KM data
                 st.markdown("### Upload KM Data (CSV or Excel)")
-                uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx"], accept_multiple_files=True,
-                                                 key="km-file-upload-tab7")
+                uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx"], accept_multiple_files=True)
 
                 # Function to process and merge all uploaded files
                 def process_files(files):
@@ -2395,7 +2536,7 @@ def main_page(username):
 
                         # Ensure 'Total' column is ignored
                         if 'Total' in df.columns:
-                            df = df.drop(columns=(['Total']))
+                            df = df.drop(columns=['Total'])
 
                         # Remove rows where 'Name' is "Total" or "TOTAL"
                         df = df[~df['Name'].str.lower().isin(['total'])]
@@ -2450,20 +2591,28 @@ def main_page(username):
                     avg_km_per_session_df['Avg KM per Session'] = avg_km_per_session_df['KM Travelled for Session'] / \
                                                                   avg_km_per_session_df['Total Sessions']
 
+                    # Display the overall average KM per session
+                    col1, col2, col3 = st.columns(3)
+
                     # Display the result
                     st.markdown("### Average KM Travelled per Session by EPOD")
-                    st.write(avg_km_per_session_df[
-                                 ['EPOD Name', 'KM Travelled for Session', 'Total Sessions', 'Avg KM per Session']])
+                    with col1:
+                        # Reorganize columns to include Total KMs, Total Sessions, and Avg KM per Session
+                        display_df = avg_km_per_session_df[
+                            ['EPOD Name', 'KM Travelled for Session', 'Total Sessions', 'Avg KM per Session']]
+
+                        st.write(display_df)
 
                     # Calculate the overall average KM per session across all EPODs
                     overall_avg_km_per_session = avg_km_per_session_df['Avg KM per Session'].mean()
 
-                    st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM")
+                    with col3:
+                        st.metric("Overall Avg KM per Session", f"{overall_avg_km_per_session:.2f} KM")
 
                     # Plotting the average kilometers per EPOD per session
                     fig = px.bar(avg_km_per_session_df, x='EPOD Name', y='Avg KM per Session',
                                  title='Average KM Travelled per Session by EPOD')
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig)
 
                     # Identify the most and least efficient EPODs based on average KM per session
                     most_efficient_epod = avg_km_per_session_df.loc[
