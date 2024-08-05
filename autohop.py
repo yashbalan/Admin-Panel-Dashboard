@@ -2286,192 +2286,192 @@ def main_page(username):
                     height=500
                 )
 
+                # Convert dates to the correct format and localize to remove timezone
+                heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.tz_localize(
+                    None)
+                shift_data_df['Actual Date'] = pd.to_datetime(shift_data_df['Actual Date']).dt.tz_localize(None)
+                v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['Actual Date']).dt.tz_localize(None)
+                v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(
+                    v_mode_shift_hours_df['Actual Date']).dt.tz_localize(None)
+
+                # Ensure calcSelfChargeDuration is numeric
+                v_mode_final_df['calcSelfChargeDuration'] = pd.to_numeric(v_mode_final_df['calcSelfChargeDuration'],
+                                                                          errors='coerce')
+
+                # Apply date filtration to both Actual V Mode and Displayed V Mode
+                v_mode_final_df_filtered = v_mode_final_df[
+                    (v_mode_final_df['Actual Date'] >= start_date) &
+                    (v_mode_final_df['Actual Date'] <= end_date) &
+                    (v_mode_final_df['calcSelfChargeDuration'] >= 15)
+                    ]
+
+                v_mode_final_df_displayed_filtered = v_mode_final_df[
+                    (v_mode_final_df['Actual Date'] >= start_date) &
+                    (v_mode_final_df['Actual Date'] <= end_date)
+                    ]
+
+                # Filter the other dataframes based on the selected date range
+                heatmap_final_df_filtered = heatmap_final_df[
+                    (heatmap_final_df['Actual Date'] >= start_date) &
+                    (heatmap_final_df['Actual Date'] <= end_date)
+                    ]
+                shift_data_df_filtered = shift_data_df[
+                    (shift_data_df['Actual Date'] >= start_date) &
+                    (shift_data_df['Actual Date'] <= end_date)
+                    ]
+                v_mode_shift_hours_df_filtered = v_mode_shift_hours_df[
+                    (v_mode_shift_hours_df['Actual Date'] >= start_date) &
+                    (v_mode_shift_hours_df['Actual Date'] <= end_date)
+                    ]
+
+                # Calculate required metrics for heatmap
+                d_mode_stats = heatmap_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
+                    Total_Sessions=('Actual Date', 'count'),
+                    Avg_Sessions=('Actual Date', lambda x: len(x) / x.nunique()),
+                    Delay_Count=('t-15_kpi', lambda x: (x == 2).sum()),
+                    D_Mode_Sessions=('donorVMode', lambda x: (x == 'FALSE').sum()),
+                    D_Mode_Unique_Shifts=('Actual Date', 'nunique'),
+                    D_Mode_Working_Days=('Actual Date', 'nunique')
+                ).reset_index()
+
+                # Calculate V Mode metrics with filter (Actual V Mode)
+                actual_v_mode_stats = v_mode_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
+                    Actual_V_Mode_Sessions=('donorVMode', lambda x: (x == 'TRUE').sum()),
+                    V_Mode_Unique_Shifts=('Actual Date', 'nunique'),
+                    V_Mode_Working_Days=('Actual Date', 'nunique')
+                ).reset_index()
+
+                # Calculate V Mode metrics without filter (Displayed V Mode) for display only
+                displayed_v_mode_stats = v_mode_final_df_displayed_filtered.groupby('Actual OPERATOR NAME').agg(
+                    Displayed_V_Mode_Sessions=('donorVMode', lambda x: (x == 'TRUE').sum()),
+                ).reset_index()
+
+                # Combine D Mode and Actual V Mode Unique Shifts and Working Days to get Total Unique Shifts and Total Working Days
+                total_unique_shifts_df = pd.merge(
+                    d_mode_stats[['Actual OPERATOR NAME', 'D_Mode_Unique_Shifts', 'D_Mode_Working_Days']],
+                    actual_v_mode_stats[['Actual OPERATOR NAME', 'V_Mode_Unique_Shifts', 'V_Mode_Working_Days']],
+                    on='Actual OPERATOR NAME', how='outer'
+                ).fillna(0)
+
+                # Calculate total unique shifts and working days by ensuring uniqueness across both D Mode and V Mode
+                total_unique_shifts_df['Total_Unique_Shifts'] = total_unique_shifts_df.apply(
+                    lambda row: len(
+                        set(list(range(int(row['D_Mode_Unique_Shifts']))) + list(
+                            range(int(row['V_Mode_Unique_Shifts']))))),
+                    axis=1
+                )
+
+                total_unique_shifts_df['Total_Working_Days'] = total_unique_shifts_df.apply(
+                    lambda row: len(
+                        set(list(range(int(row['D_Mode_Working_Days']))) + list(
+                            range(int(row['V_Mode_Working_Days']))))),
+                    axis=1
+                )
+
+                # Combine D Mode and V Mode data for shifts
+                combined_shift_data = pd.concat(
+                    [shift_data_df_filtered, v_mode_shift_hours_df_filtered]).drop_duplicates(
+                    subset=['shiftUid'])
+
+                # Calculate total shift hours by ensuring each operator only has one shift counted per day
+                total_shifts = combined_shift_data.groupby(['Actual OPERATOR NAME', 'Actual Date']).agg(
+                    Total_Shift_Hours_Per_Day=('Shift_Hours', 'sum')  # Summing shift hours per day
+                ).reset_index()
+
+                # Group by operator to aggregate across days, summing total shift hours
+                total_shifts = total_shifts.groupby('Actual OPERATOR NAME').agg(
+                    Total_Shift_Hours=('Total_Shift_Hours_Per_Day', 'sum'),
+                ).reset_index()
+
+                # Merge D Mode metrics with Actual V Mode metrics (only these are used for calculations)
+                operator_stats = pd.merge(d_mode_stats, actual_v_mode_stats, on='Actual OPERATOR NAME',
+                                          how='outer').fillna(0)
+
+                # Merge with total shifts, unique shifts, and average shift hours
+                operator_stats = pd.merge(operator_stats, total_shifts, on='Actual OPERATOR NAME', how='left')
+
+                # Merge with Total Unique Shifts and Working Days
+                operator_stats = pd.merge(operator_stats, total_unique_shifts_df[
+                    ['Actual OPERATOR NAME', 'Total_Unique_Shifts', 'Total_Working_Days']],
+                                          on='Actual OPERATOR NAME', how='left')
+
+                # Merge with Displayed V Mode for display purposes only
+                operator_stats = pd.merge(operator_stats, displayed_v_mode_stats, on='Actual OPERATOR NAME',
+                                          how='outer').fillna(0)
+
+                # Calculate Average Shift Hours correctly using Total_Unique_Shifts
+                operator_stats['Avg_Shift_Hours'] = operator_stats['Total_Shift_Hours'] / operator_stats[
+                    'Total_Unique_Shifts']
+
+                # Check the number of columns
+                print(f"Columns in operator_stats: {operator_stats.columns}")
+
+                # Rename columns for better display
+                # Ensure the correct number of columns in the rename operation
+                # Correct the column renaming step to match the number of columns in operator_stats
+                operator_stats.columns = ['Operator', 'Total Sessions', 'Avg Sessions', 'Delay Count',
+                                          'D Mode Sessions', 'D Mode Unique Shifts', 'D Mode Working Days',
+                                          'Actual V Mode Sessions', 'V Mode Unique Shifts', 'V Mode Working Days',
+                                          'Total Shift Hours', 'Total Unique Shifts', 'Total Working Days',
+                                          'Displayed V Mode Sessions', 'Avg Shift Hours']
+
+                # Adjust the total summary calculation to use the correct column names
+                total_summary = operator_stats[
+                    ['Total Sessions', 'Delay Count', 'D Mode Sessions', 'Actual V Mode Sessions',
+                     'Total Shift Hours', 'Displayed V Mode Sessions']].sum()
+
+                # Calculate the max for Total Unique Shifts and Total Working Days
+                total_summary['Total Unique Shifts'] = operator_stats['Total Unique Shifts'].sum()
+                total_summary['Total Working Days'] = operator_stats['Total Working Days'].max()
+
+                # Calculate weighted average for 'Avg Shift Hours' for the total summary
+                if total_summary['Total Unique Shifts'] > 0:
+                    total_summary['Avg Shift Hours'] = total_summary['Total Shift Hours'] / total_summary[
+                        'Total Unique Shifts']
+                else:
+                    total_summary['Avg Shift Hours'] = 0
+
+                total_summary['Operator'] = 'Total'
+                total_summary['Avg Sessions'] = operator_stats['Avg Sessions'].mean()
+
+                # Convert total_summary to a DataFrame and concatenate
+                total_summary_df = pd.DataFrame(total_summary).T
+
+                # Concatenate the total summary row with the operator_stats DataFrame
+                operator_stats = pd.concat([operator_stats, total_summary_df], ignore_index=True)
+
+                # Format the data to remove unnecessary decimals except for averages
+                operator_stats['Total Sessions'] = operator_stats['Total Sessions'].astype(int)
+                operator_stats['Delay Count'] = operator_stats['Delay Count'].astype(int)
+                operator_stats['D Mode Sessions'] = operator_stats['D Mode Sessions'].astype(int)
+                operator_stats['Displayed V Mode Sessions'] = operator_stats['Displayed V Mode Sessions'].astype(
+                    int)
+                operator_stats['Actual V Mode Sessions'] = operator_stats['Actual V Mode Sessions'].astype(int)
+                operator_stats['Total Unique Shifts'] = operator_stats['Total Unique Shifts'].astype(int)
+                operator_stats['Total Working Days'] = operator_stats['Total Working Days'].astype(int)
+
+                # Display the table
+                st.markdown("### Operator Statistics Table")
+                st.table(operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
+                                         'Total Shift Hours', 'Total Working Days', 'Avg Shift Hours',
+                                         'Delay Count',
+                                         'Displayed V Mode Sessions', 'D Mode Sessions', 'Actual V Mode Sessions']])
+
+                # Export the table to CSV
+                csv = operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
+                                      'Total Shift Hours', 'Total Working Days', 'Avg Shift Hours', 'Delay Count',
+                                      'Displayed V Mode Sessions', 'D Mode Sessions',
+                                      'Actual V Mode Sessions']].to_csv(index=False)
+
+                st.download_button(
+                    label="Download data as CSV",
+                    data=csv,
+                    file_name='operator_statistics.csv',
+                    mime='text/csv',
+                )
+                
                 with col4:
                     st.plotly_chart(fig_working_days)
-
-                    # Convert dates to the correct format and localize to remove timezone
-                    heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.tz_localize(
-                        None)
-                    shift_data_df['Actual Date'] = pd.to_datetime(shift_data_df['Actual Date']).dt.tz_localize(None)
-                    v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['Actual Date']).dt.tz_localize(None)
-                    v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(
-                        v_mode_shift_hours_df['Actual Date']).dt.tz_localize(None)
-
-                    # Ensure calcSelfChargeDuration is numeric
-                    v_mode_final_df['calcSelfChargeDuration'] = pd.to_numeric(v_mode_final_df['calcSelfChargeDuration'],
-                                                                              errors='coerce')
-
-                    # Apply date filtration to both Actual V Mode and Displayed V Mode
-                    v_mode_final_df_filtered = v_mode_final_df[
-                        (v_mode_final_df['Actual Date'] >= start_date) &
-                        (v_mode_final_df['Actual Date'] <= end_date) &
-                        (v_mode_final_df['calcSelfChargeDuration'] >= 15)
-                        ]
-
-                    v_mode_final_df_displayed_filtered = v_mode_final_df[
-                        (v_mode_final_df['Actual Date'] >= start_date) &
-                        (v_mode_final_df['Actual Date'] <= end_date)
-                        ]
-
-                    # Filter the other dataframes based on the selected date range
-                    heatmap_final_df_filtered = heatmap_final_df[
-                        (heatmap_final_df['Actual Date'] >= start_date) &
-                        (heatmap_final_df['Actual Date'] <= end_date)
-                        ]
-                    shift_data_df_filtered = shift_data_df[
-                        (shift_data_df['Actual Date'] >= start_date) &
-                        (shift_data_df['Actual Date'] <= end_date)
-                        ]
-                    v_mode_shift_hours_df_filtered = v_mode_shift_hours_df[
-                        (v_mode_shift_hours_df['Actual Date'] >= start_date) &
-                        (v_mode_shift_hours_df['Actual Date'] <= end_date)
-                        ]
-
-                    # Calculate required metrics for heatmap
-                    d_mode_stats = heatmap_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
-                        Total_Sessions=('Actual Date', 'count'),
-                        Avg_Sessions=('Actual Date', lambda x: len(x) / x.nunique()),
-                        Delay_Count=('t-15_kpi', lambda x: (x == 2).sum()),
-                        D_Mode_Sessions=('donorVMode', lambda x: (x == 'FALSE').sum()),
-                        D_Mode_Unique_Shifts=('Actual Date', 'nunique'),
-                        D_Mode_Working_Days=('Actual Date', 'nunique')
-                    ).reset_index()
-
-                    # Calculate V Mode metrics with filter (Actual V Mode)
-                    actual_v_mode_stats = v_mode_final_df_filtered.groupby('Actual OPERATOR NAME').agg(
-                        Actual_V_Mode_Sessions=('donorVMode', lambda x: (x == 'TRUE').sum()),
-                        V_Mode_Unique_Shifts=('Actual Date', 'nunique'),
-                        V_Mode_Working_Days=('Actual Date', 'nunique')
-                    ).reset_index()
-
-                    # Calculate V Mode metrics without filter (Displayed V Mode) for display only
-                    displayed_v_mode_stats = v_mode_final_df_displayed_filtered.groupby('Actual OPERATOR NAME').agg(
-                        Displayed_V_Mode_Sessions=('donorVMode', lambda x: (x == 'TRUE').sum()),
-                    ).reset_index()
-
-                    # Combine D Mode and Actual V Mode Unique Shifts and Working Days to get Total Unique Shifts and Total Working Days
-                    total_unique_shifts_df = pd.merge(
-                        d_mode_stats[['Actual OPERATOR NAME', 'D_Mode_Unique_Shifts', 'D_Mode_Working_Days']],
-                        actual_v_mode_stats[['Actual OPERATOR NAME', 'V_Mode_Unique_Shifts', 'V_Mode_Working_Days']],
-                        on='Actual OPERATOR NAME', how='outer'
-                    ).fillna(0)
-
-                    # Calculate total unique shifts and working days by ensuring uniqueness across both D Mode and V Mode
-                    total_unique_shifts_df['Total_Unique_Shifts'] = total_unique_shifts_df.apply(
-                        lambda row: len(
-                            set(list(range(int(row['D_Mode_Unique_Shifts']))) + list(
-                                range(int(row['V_Mode_Unique_Shifts']))))),
-                        axis=1
-                    )
-
-                    total_unique_shifts_df['Total_Working_Days'] = total_unique_shifts_df.apply(
-                        lambda row: len(
-                            set(list(range(int(row['D_Mode_Working_Days']))) + list(
-                                range(int(row['V_Mode_Working_Days']))))),
-                        axis=1
-                    )
-
-                    # Combine D Mode and V Mode data for shifts
-                    combined_shift_data = pd.concat(
-                        [shift_data_df_filtered, v_mode_shift_hours_df_filtered]).drop_duplicates(
-                        subset=['shiftUid'])
-
-                    # Calculate total shift hours by ensuring each operator only has one shift counted per day
-                    total_shifts = combined_shift_data.groupby(['Actual OPERATOR NAME', 'Actual Date']).agg(
-                        Total_Shift_Hours_Per_Day=('Shift_Hours', 'sum')  # Summing shift hours per day
-                    ).reset_index()
-
-                    # Group by operator to aggregate across days, summing total shift hours
-                    total_shifts = total_shifts.groupby('Actual OPERATOR NAME').agg(
-                        Total_Shift_Hours=('Total_Shift_Hours_Per_Day', 'sum'),
-                    ).reset_index()
-
-                    # Merge D Mode metrics with Actual V Mode metrics (only these are used for calculations)
-                    operator_stats = pd.merge(d_mode_stats, actual_v_mode_stats, on='Actual OPERATOR NAME',
-                                              how='outer').fillna(0)
-
-                    # Merge with total shifts, unique shifts, and average shift hours
-                    operator_stats = pd.merge(operator_stats, total_shifts, on='Actual OPERATOR NAME', how='left')
-
-                    # Merge with Total Unique Shifts and Working Days
-                    operator_stats = pd.merge(operator_stats, total_unique_shifts_df[
-                        ['Actual OPERATOR NAME', 'Total_Unique_Shifts', 'Total_Working_Days']],
-                                              on='Actual OPERATOR NAME', how='left')
-
-                    # Merge with Displayed V Mode for display purposes only
-                    operator_stats = pd.merge(operator_stats, displayed_v_mode_stats, on='Actual OPERATOR NAME',
-                                              how='outer').fillna(0)
-
-                    # Calculate Average Shift Hours correctly using Total_Unique_Shifts
-                    operator_stats['Avg_Shift_Hours'] = operator_stats['Total_Shift_Hours'] / operator_stats[
-                        'Total_Unique_Shifts']
-
-                    # Check the number of columns
-                    print(f"Columns in operator_stats: {operator_stats.columns}")
-
-                    # Rename columns for better display
-                    # Ensure the correct number of columns in the rename operation
-                    # Correct the column renaming step to match the number of columns in operator_stats
-                    operator_stats.columns = ['Operator', 'Total Sessions', 'Avg Sessions', 'Delay Count',
-                                              'D Mode Sessions', 'D Mode Unique Shifts', 'D Mode Working Days',
-                                              'Actual V Mode Sessions', 'V Mode Unique Shifts', 'V Mode Working Days',
-                                              'Total Shift Hours', 'Total Unique Shifts', 'Total Working Days',
-                                              'Displayed V Mode Sessions', 'Avg Shift Hours']
-
-                    # Adjust the total summary calculation to use the correct column names
-                    total_summary = operator_stats[
-                        ['Total Sessions', 'Delay Count', 'D Mode Sessions', 'Actual V Mode Sessions',
-                         'Total Shift Hours', 'Displayed V Mode Sessions']].sum()
-
-                    # Calculate the max for Total Unique Shifts and Total Working Days
-                    total_summary['Total Unique Shifts'] = operator_stats['Total Unique Shifts'].sum()
-                    total_summary['Total Working Days'] = operator_stats['Total Working Days'].max()
-
-                    # Calculate weighted average for 'Avg Shift Hours' for the total summary
-                    if total_summary['Total Unique Shifts'] > 0:
-                        total_summary['Avg Shift Hours'] = total_summary['Total Shift Hours'] / total_summary[
-                            'Total Unique Shifts']
-                    else:
-                        total_summary['Avg Shift Hours'] = 0
-
-                    total_summary['Operator'] = 'Total'
-                    total_summary['Avg Sessions'] = operator_stats['Avg Sessions'].mean()
-
-                    # Convert total_summary to a DataFrame and concatenate
-                    total_summary_df = pd.DataFrame(total_summary).T
-
-                    # Concatenate the total summary row with the operator_stats DataFrame
-                    operator_stats = pd.concat([operator_stats, total_summary_df], ignore_index=True)
-
-                    # Format the data to remove unnecessary decimals except for averages
-                    operator_stats['Total Sessions'] = operator_stats['Total Sessions'].astype(int)
-                    operator_stats['Delay Count'] = operator_stats['Delay Count'].astype(int)
-                    operator_stats['D Mode Sessions'] = operator_stats['D Mode Sessions'].astype(int)
-                    operator_stats['Displayed V Mode Sessions'] = operator_stats['Displayed V Mode Sessions'].astype(
-                        int)
-                    operator_stats['Actual V Mode Sessions'] = operator_stats['Actual V Mode Sessions'].astype(int)
-                    operator_stats['Total Unique Shifts'] = operator_stats['Total Unique Shifts'].astype(int)
-                    operator_stats['Total Working Days'] = operator_stats['Total Working Days'].astype(int)
-
-                    # Display the table
-                    st.markdown("### Operator Statistics Table")
-                    st.table(operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
-                                             'Total Shift Hours', 'Total Working Days', 'Avg Shift Hours',
-                                             'Delay Count',
-                                             'Displayed V Mode Sessions', 'D Mode Sessions', 'Actual V Mode Sessions']])
-
-                    # Export the table to CSV
-                    csv = operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
-                                          'Total Shift Hours', 'Total Working Days', 'Avg Shift Hours', 'Delay Count',
-                                          'Displayed V Mode Sessions', 'D Mode Sessions',
-                                          'Actual V Mode Sessions']].to_csv(index=False)
-
-                    st.download_button(
-                        label="Download data as CSV",
-                        data=csv,
-                        file_name='operator_statistics.csv',
-                        mime='text/csv',
-                    )
 
             with tab7:
                 # Check if the DataFrame is empty
