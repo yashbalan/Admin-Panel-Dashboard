@@ -184,7 +184,7 @@ def main_page(username):
 
             # Process V_Mode Data
             v_mode_final_df = v_mode_drivers_df[
-                ['licensePlate', 'shiftUid', 'Actual OPERATOR NAME', 'donorVMode', 'shiftStartedAt', 'shiftEndedAt']]
+                ['licensePlate', 'shiftUid', 'Actual OPERATOR NAME', 'donorVMode', 'shiftStartedAt', 'shiftEndedAt', 'calcSelfChargeDuration']]
             v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['shiftStartedAt'], errors='coerce')
             v_mode_final_df = v_mode_final_df.dropna(subset=['Actual Date'])
 
@@ -2296,12 +2296,20 @@ def main_page(username):
                     v_mode_shift_hours_df['Actual Date']).dt.tz_localize(
                     None)
 
+                # Ensure calcSelfChargeDuration is numeric
+                v_mode_final_df['calcSelfChargeDuration'] = pd.to_numeric(v_mode_final_df['calcSelfChargeDuration'],
+                                                                      errors='coerce')
+
+                # Filter out V_Mode records where calcSelfChargeDuration is less than 15
+                v_mode_final_df_filtered = v_mode_final_df[(v_mode_final_df['Actual Date'] >= start_date) &
+                (v_mode_final_df['Actual Date'] <= end_date) &
+                (v_mode_final_df['calcSelfChargeDuration'] >= 15)
+                ]
+
                 heatmap_final_df_filtered = heatmap_final_df[
                     (heatmap_final_df['Actual Date'] >= start_date) & (heatmap_final_df['Actual Date'] <= end_date)]
                 shift_data_df_filtered = shift_data_df[
                     (shift_data_df['Actual Date'] >= start_date) & (shift_data_df['Actual Date'] <= end_date)]
-                v_mode_final_df_filtered = v_mode_final_df[
-                    (v_mode_final_df['Actual Date'] >= start_date) & (v_mode_final_df['Actual Date'] <= end_date)]
                 v_mode_shift_hours_df_filtered = v_mode_shift_hours_df[
                     (v_mode_shift_hours_df['Actual Date'] >= start_date) & (
                             v_mode_shift_hours_df['Actual Date'] <= end_date)]
