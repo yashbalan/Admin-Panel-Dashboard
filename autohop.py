@@ -15,6 +15,8 @@ from streamlit_folium import folium_static
 from folium import plugins
 import openpyxl
 from plotly.subplots import make_subplots
+from datetime import datetime, time, timedelta
+from fractions import Fraction
 
 st.set_page_config(layout="wide", page_title="Hopcharge Dashboard", page_icon=":bar_chart:")
 
@@ -184,7 +186,8 @@ def main_page(username):
 
             # Process V_Mode Data
             v_mode_final_df = v_mode_drivers_df[
-                ['licensePlate', 'shiftUid', 'Actual OPERATOR NAME', 'donorVMode', 'shiftStartedAt', 'shiftEndedAt', 'calcSelfChargeDuration']]
+                ['licensePlate', 'shiftUid', 'Actual OPERATOR NAME', 'donorVMode', 'shiftStartedAt', 'shiftEndedAt',
+                 'calcSelfChargeDuration']]
             v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['shiftStartedAt'], errors='coerce')
             v_mode_final_df = v_mode_final_df.dropna(subset=['Actual Date'])
 
@@ -2287,12 +2290,10 @@ def main_page(username):
                 )
 
                 # Convert dates to the correct format and localize to remove timezone
-                heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.tz_localize(
-                    None)
-                shift_data_df['Actual Date'] = pd.to_datetime(shift_data_df['Actual Date']).dt.tz_localize(None)
-                v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['Actual Date']).dt.tz_localize(None)
-                v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(
-                    v_mode_shift_hours_df['Actual Date']).dt.tz_localize(None)
+                heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.date
+                shift_data_df['Actual Date'] = pd.to_datetime(shift_data_df['Actual Date']).dt.date
+                v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['Actual Date']).dt.date
+                v_mode_shift_hours_df['Actual Date'] = pd.to_datetime(v_mode_shift_hours_df['Actual Date']).dt.date
 
                 # Ensure calcSelfChargeDuration is numeric
                 v_mode_final_df['calcSelfChargeDuration'] = pd.to_numeric(v_mode_final_df['calcSelfChargeDuration'],
@@ -2300,28 +2301,28 @@ def main_page(username):
 
                 # Apply date filtration to both Actual V Mode and Displayed V Mode
                 v_mode_final_df_filtered = v_mode_final_df[
-                    (v_mode_final_df['Actual Date'] >= start_date) &
-                    (v_mode_final_df['Actual Date'] <= end_date) &
+                    (v_mode_final_df['Actual Date'] >= start_date.date()) &
+                    (v_mode_final_df['Actual Date'] <= end_date.date()) &
                     (v_mode_final_df['calcSelfChargeDuration'] >= 15)
                     ]
 
                 v_mode_final_df_displayed_filtered = v_mode_final_df[
-                    (v_mode_final_df['Actual Date'] >= start_date) &
-                    (v_mode_final_df['Actual Date'] <= end_date)
+                    (v_mode_final_df['Actual Date'] >= start_date.date()) &
+                    (v_mode_final_df['Actual Date'] <= end_date.date())
                     ]
 
                 # Filter the other dataframes based on the selected date range
                 heatmap_final_df_filtered = heatmap_final_df[
-                    (heatmap_final_df['Actual Date'] >= start_date) &
-                    (heatmap_final_df['Actual Date'] <= end_date)
+                    (heatmap_final_df['Actual Date'] >= start_date.date()) &
+                    (heatmap_final_df['Actual Date'] <= end_date.date())
                     ]
                 shift_data_df_filtered = shift_data_df[
-                    (shift_data_df['Actual Date'] >= start_date) &
-                    (shift_data_df['Actual Date'] <= end_date)
+                    (shift_data_df['Actual Date'] >= start_date.date()) &
+                    (shift_data_df['Actual Date'] <= end_date.date())
                     ]
                 v_mode_shift_hours_df_filtered = v_mode_shift_hours_df[
-                    (v_mode_shift_hours_df['Actual Date'] >= start_date) &
-                    (v_mode_shift_hours_df['Actual Date'] <= end_date)
+                    (v_mode_shift_hours_df['Actual Date'] >= start_date.date()) &
+                    (v_mode_shift_hours_df['Actual Date'] <= end_date.date())
                     ]
 
                 # Calculate required metrics for heatmap
@@ -2403,12 +2404,7 @@ def main_page(username):
                 operator_stats['Avg_Shift_Hours'] = operator_stats['Total_Shift_Hours'] / operator_stats[
                     'Total_Unique_Shifts']
 
-                # Check the number of columns
-                print(f"Columns in operator_stats: {operator_stats.columns}")
-
                 # Rename columns for better display
-                # Ensure the correct number of columns in the rename operation
-                # Correct the column renaming step to match the number of columns in operator_stats
                 operator_stats.columns = ['Operator', 'Total Sessions', 'Avg Sessions', 'Delay Count',
                                           'D Mode Sessions', 'D Mode Unique Shifts', 'D Mode Working Days',
                                           'Actual V Mode Sessions', 'V Mode Unique Shifts', 'V Mode Working Days',
@@ -2444,34 +2440,432 @@ def main_page(username):
                 operator_stats['Total Sessions'] = operator_stats['Total Sessions'].astype(int)
                 operator_stats['Delay Count'] = operator_stats['Delay Count'].astype(int)
                 operator_stats['D Mode Sessions'] = operator_stats['D Mode Sessions'].astype(int)
-                operator_stats['Displayed V Mode Sessions'] = operator_stats['Displayed V Mode Sessions'].astype(
-                    int)
+                operator_stats['Displayed V Mode Sessions'] = operator_stats['Displayed V Mode Sessions'].astype(int)
                 operator_stats['Actual V Mode Sessions'] = operator_stats['Actual V Mode Sessions'].astype(int)
                 operator_stats['Total Unique Shifts'] = operator_stats['Total Unique Shifts'].astype(int)
                 operator_stats['Total Working Days'] = operator_stats['Total Working Days'].astype(int)
 
-                # Display the table
-                st.markdown("### Operator Statistics Table")
-                st.table(operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
-                                         'Total Shift Hours', 'Total Working Days', 'Avg Shift Hours',
-                                         'Delay Count',
-                                         'Displayed V Mode Sessions', 'D Mode Sessions', 'Actual V Mode Sessions']])
+                # Select only the required columns for the final table
+                final_operator_stats = operator_stats[
+                    ['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
+                     'Total Shift Hours', 'Total Working Days', 'Avg Shift Hours',
+                     'Delay Count',
+                     'Displayed V Mode Sessions', 'D Mode Sessions',
+                     'Actual V Mode Sessions']]
+
+                # Stack the metrics for better display
+                final_operator_stats_stacked = final_operator_stats.set_index('Operator').stack().reset_index()
+                final_operator_stats_stacked.columns = ['Operator', 'Metric', 'Value']
+
+                # Pivot the table to display metrics as columns
+                pivot_operator_stats_stacked = final_operator_stats_stacked.pivot_table(
+                    index='Operator',
+                    columns='Metric',
+                    values='Value',
+                    aggfunc='sum'
+                )
+
+                # Add the "Total" row at the end of the DataFrame
+                total_row = pivot_operator_stats_stacked.loc[['Total']]
+                pivot_operator_stats_stacked = pd.concat([pivot_operator_stats_stacked.drop(index='Total'), total_row],
+                                                         axis=0)
+
+                # Function to apply custom styles for table headers
+                def style_headers(df):
+                    # Define a color map for different columns
+                    color_map = {
+                        'Total Sessions': 'background-color: #4CAF50; color: white;',
+                        'Avg Sessions': 'background-color: #2196F3; color: white;',
+                        'Delay Count': 'background-color: #f44336; color: white;',
+                        'D Mode Sessions': 'background-color: #ff9800; color: white;',
+                        'Displayed V Mode Sessions': 'background-color: #9c27b0; color: white;',
+                        'Actual V Mode Sessions': 'background-color: #3f51b5; color: white;',
+                        'Total Unique Shifts': 'background-color: #009688; color: white;',
+                        'Total Working Days': 'background-color: #e91e63; color: white;',
+                        'Avg Shift Hours': 'background-color: #8bc34a; color: white;',
+                        'Total Shift Hours': 'background-color: #03a9f4; color: white;',
+                    }
+
+                    # Apply styles to the headers based on the column names
+                    styled_df = df.style.applymap(lambda x: '', subset=pd.IndexSlice[:, :]).applymap(lambda x: '',
+                                                                                                     subset=pd.IndexSlice[
+                                                                                                            :, :])
+                    for col, color in color_map.items():
+                        if col in df.columns:
+                            styled_df = styled_df.set_table_styles({col: [{'selector': 'th', 'props': color}]},
+                                                                   overwrite=False,
+                                                                   axis=1)
+
+                    # Highlight the "Total" row
+                    def highlight_total_row(row):
+                        return ['background-color: #FFD700' if row.name == 'Total' else '' for _ in row]
+
+                    styled_df = styled_df.apply(highlight_total_row, axis=1)
+
+                    return styled_df
+
+                # Style the pivot table headers
+                styled_pivot_operator_stats_stacked = style_headers(pivot_operator_stats_stacked)
+
+                # Display the stacked and pivoted Operator Statistics Table
+                st.markdown("### Operator Statistics Table (Pivot Table with Stacked Metrics)")
+                st.dataframe(styled_pivot_operator_stats_stacked, use_container_width=True)
 
                 # Export the table to CSV
-                csv = operator_stats[['Operator', 'Total Sessions', 'Avg Sessions', 'Total Unique Shifts',
-                                      'Total Shift Hours', 'Total Working Days', 'Avg Shift Hours', 'Delay Count',
-                                      'Displayed V Mode Sessions', 'D Mode Sessions',
-                                      'Actual V Mode Sessions']].to_csv(index=False)
+                csv = pivot_operator_stats_stacked.to_csv(index=False)
 
                 st.download_button(
-                    label="Download data as CSV",
+                    label="Download Operator Statistics as CSV",
                     data=csv,
-                    file_name='operator_statistics.csv',
+                    file_name='operator_statistics_pivot_table.csv',
                     mime='text/csv',
                 )
-                
+
+                # Ensure the 'Actual Date' is in datetime format
+                final_df['Actual Date'] = pd.to_datetime(final_df['Actual Date'], errors='coerce')
+
+                # Define the function to adjust the date based on session time
+                def adjust_date_for_8am_to_8am(session_time):
+                    if isinstance(session_time, datetime):
+                        if session_time.time() < time(8, 0):
+                            return session_time.date() - timedelta(days=1)
+                        else:
+                            return session_time.date()
+                    else:
+                        return session_time  # Handle cases where the conversion to datetime failed
+
+                # Apply the adjustment to the 'Actual Date' column based on session time in all relevant DataFrames
+                heatmap_final_df_filtered['Adjusted Date'] = heatmap_final_df_filtered['Actual Date'].apply(
+                    adjust_date_for_8am_to_8am)
+                v_mode_final_df_filtered['Adjusted Date'] = v_mode_final_df_filtered['Actual Date'].apply(
+                    adjust_date_for_8am_to_8am)
+                final_df['Adjusted Date'] = final_df['Actual Date'].apply(adjust_date_for_8am_to_8am)
+
+                # Filter final_df for the relevant date range after adjusting the date
+                filtered_data = final_df[
+                    (final_df['Adjusted Date'] >= start_date.date()) &
+                    (final_df['Adjusted Date'] <= end_date.date())
+                    ]
+
+                # Calculate date-wise total sessions using the adjusted date
+                date_wise_total_sessions = heatmap_final_df_filtered.groupby('Adjusted Date').agg(
+                    D_Mode_Sessions=('donorVMode', lambda x: (x == 'FALSE').sum())
+                ).reset_index()
+
+                v_mode_date_wise_stats = v_mode_final_df_filtered.groupby('Adjusted Date').agg(
+                    Actual_V_Mode_Sessions=('donorVMode', lambda x: (x == 'TRUE').sum())
+                ).reset_index()
+
+                # Calculate Subscriber's Sessions and Adhoc Sessions
+                subscription_stats = heatmap_final_df_filtered.groupby('Adjusted Date').agg(
+                    Subscribers_Sessions=('subscriptionName', lambda x: x.notna().sum()),
+                    Adhoc_Sessions=('subscriptionName', lambda x: x.isna().sum())
+                ).reset_index()
+
+                # Calculate Delay Count, T-15 Count, T-30 Count, and On-Time SLA
+                kpi_counts = heatmap_final_df_filtered.groupby('Adjusted Date').agg(
+                    Delay_Count=('t-30_kpi', lambda x: (x == '2').sum()),
+                    T_15_min_Count=('t-30_kpi', lambda x: (x == '1').sum()),
+                    T_30_min_Count=('t-30_kpi', lambda x: (x == '3').sum()),
+                    On_Time_Count=('t-30_kpi', lambda x: (x == '0').sum())
+                ).reset_index()
+
+                # Calculate On-Time SLA Percent
+                kpi_counts['On_Time_SLA_Percent'] = (
+                                                            (kpi_counts['T_15_min_Count'] + kpi_counts[
+                                                                'T_30_min_Count'] +
+                                                             kpi_counts['On_Time_Count']) /
+                                                            (kpi_counts['T_15_min_Count'] + kpi_counts[
+                                                                'T_30_min_Count'] +
+                                                             kpi_counts['Delay_Count'] + kpi_counts['On_Time_Count'])
+                                                    ) * 100
+
+                # Merge KPI counts into date_wise_total_sessions
+                date_wise_total_sessions = pd.merge(date_wise_total_sessions, kpi_counts, on='Adjusted Date',
+                                                    how='left').fillna(0)
+
+                # Merge D Mode, V Mode sessions, and Subscription stats data
+                date_wise_stats = pd.merge(date_wise_total_sessions, v_mode_date_wise_stats, on='Adjusted Date',
+                                           how='outer').fillna(0)
+                date_wise_stats = pd.merge(date_wise_stats, subscription_stats, on='Adjusted Date', how='left').fillna(
+                    0)
+
+                # Calculate total sessions by summing the D Mode and V Mode sessions
+                date_wise_stats['Total_Sessions'] = date_wise_stats['D_Mode_Sessions'] + date_wise_stats[
+                    'Actual_V_Mode_Sessions']
+
+                # Calculate Best and Worst Optimized ePODs
+                epod_sessions_per_day = filtered_data.groupby(['Adjusted Date', 'EPOD Name']).size().reset_index(
+                    name='Sessions Count')
+
+                best_optimized_epod = epod_sessions_per_day.groupby('Adjusted Date').agg(
+                    Best_Optimized_ePOD=('Sessions Count', 'max')
+                ).reset_index()
+
+                worst_optimized_epod = epod_sessions_per_day.groupby('Adjusted Date').agg(
+                    Worst_Optimized_ePOD=('Sessions Count', 'min')
+                ).reset_index()
+
+                # Merge Best and Worst Optimized ePOD data with the date-wise KPI data
+                date_wise_stats = pd.merge(date_wise_stats, best_optimized_epod, on='Adjusted Date', how='left')
+                date_wise_stats = pd.merge(date_wise_stats, worst_optimized_epod, on='Adjusted Date', how='left')
+
+                # Rename Adjusted Date to Actual Date for display purposes
+                date_wise_stats.rename(columns={'Adjusted Date': 'Actual Date'}, inplace=True)
+
+                # Define the function to categorize sessions into day or night
+                def categorize_day_night(session_time):
+                    if 8 <= session_time.hour < 20:
+                        return 'Day'
+                    else:
+                        return 'Night'
+
+                # Apply the function to categorize day and night sessions
+                filtered_data['Day/Night'] = filtered_data['Booking Session time'].apply(categorize_day_night)
+
+                # Group by date and day/night to calculate session counts
+                day_night_sessions = filtered_data.groupby(['Actual Date', 'Day/Night']).size().unstack(
+                    fill_value=0).reset_index()
+
+                # Rename the columns for clarity
+                day_night_sessions.columns = ['Actual Date', 'Night Time Sessions', 'Day Time Sessions']
+
+                # Ensure the 'Actual Date' is in datetime format for both DataFrames
+                date_wise_stats['Actual Date'] = pd.to_datetime(date_wise_stats['Actual Date'], errors='coerce')
+                day_night_sessions['Actual Date'] = pd.to_datetime(day_night_sessions['Actual Date'], errors='coerce')
+
+                # Merge day and night time sessions data with the existing date-wise summary table
+                date_wise_stats = pd.merge(date_wise_stats, day_night_sessions, on='Actual Date', how='left').fillna(0)
+
+                # Function to calculate the ratio as a decimal
+                def calculate_ratio(d_mode_sessions, v_mode_sessions):
+                    if v_mode_sessions == 0:
+                        return d_mode_sessions
+                    else:
+                        return round(d_mode_sessions / v_mode_sessions, 2)
+
+                # Calculate and format the D Mode:V Mode ratio as a decimal
+                date_wise_stats['D_Mode_V_Mode_Ratio'] = date_wise_stats.apply(
+                    lambda row: calculate_ratio(int(row['D_Mode_Sessions']), int(row['Actual_V_Mode_Sessions'])), axis=1
+                )
+
+                # Classify V Modes into Wall Unit and CPO
+                def classify_v_mode(station_name):
+                    if station_name.startswith('WU_'):
+                        return 'Wall Unit'
+                    else:
+                        return 'CPO'
+
+                # Apply the classification function to the 'selfChargeStationName' column in the V Mode data
+                v_mode_final_df_filtered['V_Mode_Type'] = v_mode_final_df_filtered['selfChargeStationName'].apply(
+                    classify_v_mode)
+
+                # Calculate the counts for each type (Wall Unit and CPO) by date
+                v_mode_wall_unit_counts = v_mode_final_df_filtered[
+                    v_mode_final_df_filtered['V_Mode_Type'] == 'Wall Unit'].groupby('Adjusted Date').size().reset_index(
+                    name='V Modes Done at Wall Unit')
+                v_mode_cpo_counts = v_mode_final_df_filtered[
+                    v_mode_final_df_filtered['V_Mode_Type'] == 'CPO'].groupby('Adjusted Date').size().reset_index(
+                    name='V Modes Done at CPO')
+
+                # Ensure the 'Adjusted Date' is in datetime format for both DataFrames
+                v_mode_wall_unit_counts['Adjusted Date'] = pd.to_datetime(v_mode_wall_unit_counts['Adjusted Date'],
+                                                                          errors='coerce')
+                v_mode_cpo_counts['Adjusted Date'] = pd.to_datetime(v_mode_cpo_counts['Adjusted Date'], errors='coerce')
+
+                # Merge the Wall Unit and CPO counts into the date_wise_stats DataFrame
+                date_wise_stats = pd.merge(date_wise_stats, v_mode_wall_unit_counts, left_on='Actual Date',
+                                           right_on='Adjusted Date', how='left').fillna(0)
+                date_wise_stats = pd.merge(date_wise_stats, v_mode_cpo_counts, left_on='Actual Date',
+                                           right_on='Adjusted Date',
+                                           how='left').fillna(0)
+
+                # Drop the redundant 'Adjusted Date' columns
+                date_wise_stats.drop(columns=['Adjusted Date_x', 'Adjusted Date_y'], inplace=True)
+
+                # Calculate HSZ-wise session counts
+                hsz_wise_stats = final_df.groupby(['Actual Date', 'Customer Location City']).size().unstack(
+                    fill_value=0).reset_index()
+
+                # Ensure 'Actual Date' is in datetime format
+                hsz_wise_stats['Actual Date'] = pd.to_datetime(hsz_wise_stats['Actual Date'], errors='coerce')
+
+                # Include columns for Delhi, Noida, and Gurugram
+                hsz_wise_stats = hsz_wise_stats[['Actual Date', 'Delhi', 'Noida', 'Gurugram']]
+
+                # Merge HSZ-wise data with the existing date-wise stats
+                date_wise_stats = pd.merge(date_wise_stats, hsz_wise_stats, on='Actual Date', how='left').fillna(0)
+
+                # Add Week and Month columns
+                date_wise_stats['Week'] = ((date_wise_stats['Actual Date'] - date_wise_stats[
+                    'Actual Date'].min()).dt.days // 7) + 1
+                date_wise_stats['Week'] = date_wise_stats['Week'].apply(lambda x: f"Week {x}")
+
+                # Create a mapping of week numbers to their date ranges
+                week_ranges = date_wise_stats.groupby('Week')['Actual Date'].agg(['min', 'max'])
+                week_ranges['Week Range'] = week_ranges.apply(
+                    lambda row: f"{row['min'].strftime('%d %b')} to {row['max'].strftime('%d %b %Y')}", axis=1)
+                week_ranges = week_ranges[['Week Range']].to_dict()['Week Range']
+
+                # Map the week ranges to the week names in date_wise_stats
+                date_wise_stats['Week'] = date_wise_stats['Week'].map(week_ranges)
+
+                # Extract the month for month-wise grouping
+                date_wise_stats['Month'] = date_wise_stats['Actual Date'].dt.strftime('%B')
+
+                # Function to get best and worst optimized ePODs along with their session counts
+                def best_worst_epod(group):
+                    epod_sessions = filtered_data[filtered_data['Actual Date'].isin(group['Actual Date'])].groupby(
+                        'EPOD Name').size()
+                    best_epod = epod_sessions.idxmax() if not epod_sessions.empty else None
+                    best_epod_count = epod_sessions.max() if not epod_sessions.empty else 0
+                    worst_epod = epod_sessions.idxmin() if not epod_sessions.empty else None
+                    worst_epod_count = epod_sessions.min() if not epod_sessions.empty else 0
+                    return pd.Series({
+                        'Best_Optimized_ePOD': f"{best_epod} ({best_epod_count} sessions)",
+                        'Worst_Optimized_ePOD': f"{worst_epod} ({worst_epod_count} sessions)"
+                    })
+
+                # Group by Week
+                week_wise_stats = date_wise_stats.groupby('Week').apply(lambda group: pd.Series({
+                    'D_Mode_Sessions': group['D_Mode_Sessions'].sum(),
+                    'Actual_V_Mode_Sessions': group['Actual_V_Mode_Sessions'].sum(),
+                    'Total_Sessions': group['Total_Sessions'].sum(),
+                    'Subscribers_Sessions': group['Subscribers_Sessions'].sum(),
+                    'Adhoc_Sessions': group['Adhoc_Sessions'].sum(),
+                    'Best_Optimized_ePOD': best_worst_epod(group)['Best_Optimized_ePOD'],
+                    'Worst_Optimized_ePOD': best_worst_epod(group)['Worst_Optimized_ePOD'],
+                    'Delay_Count': group['Delay_Count'].sum(),
+                    'On_Time_SLA_Percent': group['On_Time_SLA_Percent'].mean(),
+                    'T_15_min_Count': group['T_15_min_Count'].sum(),
+                    'T_30_min_Count': group['T_30_min_Count'].sum(),
+                    'Day_Time_Sessions': group['Day Time Sessions'].sum(),
+                    'Night_Time_Sessions': group['Night Time Sessions'].sum(),
+                    'D_Mode_V_Mode_Ratio': calculate_ratio(group['D_Mode_Sessions'].sum(),
+                                                           group['Actual_V_Mode_Sessions'].sum()),
+                    'V_Modes_Done_at_Wall_Unit': group['V Modes Done at Wall Unit'].sum(),
+                    'V_Modes_Done_at_CPO': group['V Modes Done at CPO'].sum(),
+                    'Delhi': group['Delhi'].sum(),
+                    'Noida': group['Noida'].sum(),
+                    'Gurugram': group['Gurugram'].sum()
+                })).reset_index()
+
+                # Group by Month
+                month_wise_stats = date_wise_stats.groupby('Month').apply(lambda group: pd.Series({
+                    'D_Mode_Sessions': group['D_Mode_Sessions'].sum(),
+                    'Actual_V_Mode_Sessions': group['Actual_V_Mode_Sessions'].sum(),
+                    'Total_Sessions': group['Total_Sessions'].sum(),
+                    'Subscribers_Sessions': group['Subscribers_Sessions'].sum(),
+                    'Adhoc_Sessions': group['Adhoc_Sessions'].sum(),
+                    'Best_Optimized_ePOD': best_worst_epod(group)['Best_Optimized_ePOD'],
+                    'Worst_Optimized_ePOD': best_worst_epod(group)['Worst_Optimized_ePOD'],
+                    'Delay_Count': group['Delay_Count'].sum(),
+                    'On_Time_SLA_Percent': group['On_Time_SLA_Percent'].mean(),
+                    'T_15_min_Count': group['T_15_min_Count'].sum(),
+                    'T_30_min_Count': group['T_30_min_Count'].sum(),
+                    'Day_Time_Sessions': group['Day Time Sessions'].sum(),
+                    'Night_Time_Sessions': group['Night Time Sessions'].sum(),
+                    'D_Mode_V_Mode_Ratio': calculate_ratio(group['D_Mode_Sessions'].sum(),
+                                                           group['Actual_V_Mode_Sessions'].sum()),
+                    'V_Modes_Done_at_Wall_Unit': group['V Modes Done at Wall Unit'].sum(),
+                    'V_Modes_Done_at_CPO': group['V Modes Done at CPO'].sum(),
+                    'Delhi': group['Delhi'].sum(),
+                    'Noida': group['Noida'].sum(),
+                    'Gurugram': group['Gurugram'].sum()
+                })).reset_index()
+
+                # Function to apply custom styles for table headers
+                def style_headers(df):
+                    # Define a color map for different columns
+                    color_map = {
+                        'D_Mode_Sessions': 'background-color: #4CAF50; color: white;',
+                        'Actual_V_Mode_Sessions': 'background-color: #2196F3; color: white;',
+                        'Total_Sessions': 'background-color: #f44336; color: white;',
+                        'Subscribers_Sessions': 'background-color: #ff9800; color: white;',
+                        'Adhoc_Sessions': 'background-color: #9c27b0; color: white;',
+                        'Best_Optimized_ePOD': 'background-color: #3f51b5; color: white;',
+                        'Worst_Optimized_ePOD': 'background-color: #009688; color: white;',
+                        'Delay_Count': 'background-color: #e91e63; color: white;',
+                        'On_Time_SLA_Percent': 'background-color: #8bc34a; color: white;',
+                        'T_15_min_Count': 'background-color: #03a9f4; color: white;',
+                        'T_30_min_Count': 'background-color: #ff5722; color: white;',
+                        'Day Time Sessions': 'background-color: #795548; color: white;',
+                        'Night Time Sessions': 'background-color: #607d8b; color: white;',
+                        'D_Mode_V_Mode_Ratio': 'background-color: #673ab7; color: white;',
+                        'V Modes Done at Wall Unit': 'background-color: #ffc107; color: white;',
+                        'V Modes Done at CPO': 'background-color: #cddc39; color: white;',
+                        'Delhi': 'background-color: #9e9e9e; color: white;',
+                        'Noida': 'background-color: #ffeb3b; color: white;',
+                        'Gurugram': 'background-color: #03a9f4; color: white;',
+                    }
+
+                    # Apply styles to the headers based on the column names
+                    styled_df = df.style.applymap(lambda x: '', subset=pd.IndexSlice[:, :]).applymap(lambda x: '',
+                                                                                                     subset=pd.IndexSlice[
+                                                                                                            :, :])
+                    for col, color in color_map.items():
+                        if col in df.columns:
+                            styled_df = styled_df.set_table_styles({col: [{'selector': 'th', 'props': color}]},
+                                                                   overwrite=False,
+                                                                   axis=1)
+
+                    return styled_df
+
+                # Stack the date-wise metrics for better display
+                pivot_table_stacked = date_wise_stats.set_index('Actual Date').stack().reset_index()
+                pivot_table_stacked.columns = ['Actual Date', 'Metric', 'Value']
+                pivot_table_stacked = pivot_table_stacked.pivot_table(
+                    index='Actual Date',
+                    columns='Metric',
+                    values='Value',
+                    aggfunc='sum'
+                )
+
+                # Style the pivot table headers
+                styled_pivot_table_stacked = style_headers(pivot_table_stacked)
+
+                # Display the Date-wise, Week-wise, and Month-wise KPI Summary Tables with styled headers
+                st.markdown("### Date-wise KPI Summary (Pivot Table with Stacked Metrics)")
+                st.dataframe(styled_pivot_table_stacked, use_container_width=True)
+
+                st.markdown("### Week-wise KPI Summary (Pivot Table)")
+                styled_week_wise_stats = style_headers(week_wise_stats)
+                st.dataframe(styled_week_wise_stats, use_container_width=True)
+
+                st.markdown("### Month-wise KPI Summary (Pivot Table)")
+                styled_month_wise_stats = style_headers(month_wise_stats)
+                st.dataframe(styled_month_wise_stats, use_container_width=True)
+
+                # Export the Date-wise, Week-wise, and Month-wise Pivot Tables to CSV
+                csv_date_wise_table = pivot_table_stacked.to_csv(index=False)
+                csv_week_wise_table = week_wise_stats.to_csv(index=False)
+                csv_month_wise_table = month_wise_stats.to_csv(index=False)
+
+                st.download_button(
+                    label="Download Date-wise KPI Summary as CSV",
+                    data=csv_date_wise_table,
+                    file_name='date_wise_kpi_summary.csv',
+                    mime='text/csv',
+                )
+
+                st.download_button(
+                    label="Download Week-wise KPI Summary (Pivot Table) as CSV",
+                    data=csv_week_wise_table,
+                    file_name='week_wise_kpi_summary_pivot_table.csv',
+                    mime='text/csv',
+                )
+
+                st.download_button(
+                    label="Download Month-wise KPI Summary (Pivot Table) as CSV",
+                    data=csv_month_wise_table,
+                    file_name='month_wise_kpi_summary_pivot_table.csv',
+                    mime='text/csv',
+                )
+
                 with col4:
                     st.plotly_chart(fig_working_days)
+                    
+                    
 
             with tab7:
                 # Check if the DataFrame is empty
