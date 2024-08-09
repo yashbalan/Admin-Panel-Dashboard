@@ -207,7 +207,7 @@ def main_page(username):
             past_bookings_df['optChargeStartTime'] = past_bookings_df['optChargeStartTime'] + time_offset
             past_bookings_df['optChargeEndTime'] = past_bookings_df['optChargeEndTime'] + time_offset
             past_bookings_df['Reach Time'] = past_bookings_df['Reach Time'] + time_offset
-            
+
             past_bookings_df.rename(columns={
                 'optBatteryBeforeChrg': 'Actual SoC_Start',
                 'optBatteryAfterChrg': 'Actual SoC_End'
@@ -2321,6 +2321,9 @@ def main_page(username):
                     height=500
                 )
 
+                with col4:
+                    st.plotly_chart(fig_working_days)
+
                 # Convert dates to the correct format and localize to remove timezone
                 heatmap_final_df['Actual Date'] = pd.to_datetime(heatmap_final_df['Actual Date']).dt.date
                 shift_data_df['Actual Date'] = pd.to_datetime(shift_data_df['Actual Date']).dt.date
@@ -2893,9 +2896,6 @@ def main_page(username):
                     file_name='month_wise_kpi_summary_pivot_table.csv',
                     mime='text/csv',
                 )
-
-                with col4:
-                    st.plotly_chart(fig_working_days)
 
 
 
