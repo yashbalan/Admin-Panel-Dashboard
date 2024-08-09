@@ -187,8 +187,9 @@ def main_page(username):
             # Process V_Mode Data
             v_mode_final_df = v_mode_drivers_df[
                 ['licensePlate', 'shiftUid', 'Actual OPERATOR NAME', 'donorVMode', 'shiftStartedAt', 'shiftEndedAt',
-                 'calcSelfChargeDuration']]
-            v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['shiftStartedAt'], errors='coerce')
+                 'calcSelfChargeDuration', 'selfChargeStationName', 'selfChargeStart']]
+
+            v_mode_final_df['Actual Date'] = pd.to_datetime(v_mode_final_df['selfChargeStart'], errors='coerce')
             v_mode_final_df = v_mode_final_df.dropna(subset=['Actual Date'])
 
             past_bookings_df['Customer Name'] = past_bookings_df['firstName'] + " " + past_bookings_df['lastName']
@@ -199,6 +200,14 @@ def main_page(username):
                                                                   errors='coerce')
             past_bookings_df['Reach Time'] = pd.to_datetime(past_bookings_df['optChargeStartTime'], format='mixed',
                                                             errors='coerce')
+
+            # Add 5 hours and 30 minutes to these columns
+            time_offset = pd.to_timedelta('5 hours 30 minutes')
+
+            past_bookings_df['optChargeStartTime'] = past_bookings_df['optChargeStartTime'] + time_offset
+            past_bookings_df['optChargeEndTime'] = past_bookings_df['optChargeEndTime'] + time_offset
+            past_bookings_df['Reach Time'] = past_bookings_df['Reach Time'] + time_offset
+            
             past_bookings_df.rename(columns={
                 'optBatteryBeforeChrg': 'Actual SoC_Start',
                 'optBatteryAfterChrg': 'Actual SoC_End'
@@ -226,6 +235,29 @@ def main_page(username):
             # Apply the function to calculate t-15_kpi
             past_bookings_df['t-15_kpi'] = past_bookings_df.apply(calculate_t_minus_15, axis=1)
 
+            # Function to calculate T-30, T-15, Delayed, and On Time sessions
+            def calculate_t_minus_30_and_15(row):
+                booking_time = row['Booking Session time']
+                arrival_time = row['Reach Time']
+
+                time_diff = booking_time - arrival_time
+
+                # Check for Delayed first
+                if time_diff < timedelta(seconds=0):
+                    return '2'  # Delayed category
+                # Check for T-30 (more than 30 minutes before the booked time)
+                elif time_diff >= timedelta(minutes=30):
+                    return '3'  # T-30 category
+                # Check for T-15 (between 15 and 30 minutes before the booked time)
+                elif time_diff >= timedelta(minutes=15):
+                    return '1'  # T-15 category
+                # If arrival is within 15 minutes before the booked time or at the booked time
+                else:
+                    return '0'  # On Time category
+
+            # Apply the function to calculate t-30_kpi
+            past_bookings_df['t-30_kpi'] = past_bookings_df.apply(calculate_t_minus_30_and_15, axis=1)
+
             if 'cancelledPenalty' not in past_bookings_df.columns:
                 past_bookings_df['cancelledPenalty'] = 0
                 past_bookings_df.loc[(past_bookings_df['canceled'] == True) & ((past_bookings_df['optChargeStartTime'] -
@@ -251,7 +283,7 @@ def main_page(username):
                  'optChargeEndTime',
                  'Reach Time', 'Actual SoC_Start', 'Actual SoC_End', 'Booking Session time', 'canceled',
                  'cancelledPenalty',
-                 't-15_kpi', 'subscriptionName', 'location.lat', 'location.long']], left_on='bookingUid',
+                 't-15_kpi','t-30_kpi', 'subscriptionName', 'location.lat', 'location.long']], left_on='bookingUid',
                                  right_on='uid',
                                  how='left')
 
@@ -260,7 +292,7 @@ def main_page(username):
                  'optChargeEndTime',
                  'Reach Time', 'Actual SoC_Start', 'Actual SoC_End', 'Booking Session time', 'canceled',
                  'cancelledPenalty',
-                 't-15_kpi', 'subscriptionName', 'location.lat', 'location.long']], left_on='bookingUid',
+                 't-15_kpi', 't-30_kpi', 'subscriptionName', 'location.lat', 'location.long']], left_on='bookingUid',
                                          right_on='uid',
                                          how='left')
 
@@ -281,7 +313,7 @@ def main_page(username):
                  'bookingStatus',
                  'customerUid', 'totalUnitsCharged', 'Customer Name', 'Actual OPERATOR NAME', 'optChargeStartTime',
                  'optChargeEndTime', 'Day', 'Reach Time', 'Actual SoC_Start', 'Actual SoC_End', 'Booking Session time',
-                 'canceled', 'cancelledPenalty', 't-15_kpi', 'subscriptionName', 'location.lat', 'location.long',
+                 'canceled', 'cancelledPenalty', 't-15_kpi', 't-30_kpi', 'subscriptionName', 'location.lat', 'location.long',
                  'donorVMode']].rename(
                 columns={'location.state': 'Customer Location City', 'totalUnitsCharged': 'KWH Pumped Per Session'})
 
@@ -290,7 +322,7 @@ def main_page(username):
                  'bookingStatus', 'shiftStartedAt', 'shiftEndedAt', 'customerUid', 'totalUnitsCharged', 'Customer Name',
                  'Actual OPERATOR NAME', 'optChargeStartTime', 'optChargeEndTime', 'Day', 'Reach Time',
                  'Actual SoC_Start',
-                 'Actual SoC_End', 'Booking Session time', 'canceled', 'cancelledPenalty', 't-15_kpi',
+                 'Actual SoC_End', 'Booking Session time', 'canceled', 'cancelledPenalty', 't-15_kpi', 't-30_kpi',
                  'subscriptionName',
                  'location.lat', 'location.long', 'donorVMode']].rename(
                 columns={'location.state': 'Customer Location City', 'totalUnitsCharged': 'KWH Pumped Per Session'})
@@ -2864,8 +2896,8 @@ def main_page(username):
 
                 with col4:
                     st.plotly_chart(fig_working_days)
-                    
-                    
+
+
 
             with tab7:
                 # Check if the DataFrame is empty
